@@ -11,6 +11,7 @@ A puzzle game where you chant a sequence of numbers, a grimoire (the **Berlekamp
 - If the next term becomes a **fraction**, the spell dissipates; if it exceeds **level 99**, it flies off the board. Advanced play exploits this: bend an arithmetic run like `3, 8, 13, 21` so the coefficients turn fractional and the trajectory self-destructs before reaching an ally.
 - If you chant fewer than twice the order, multiple minimal recurrences fit your sequence (an **ambiguous** badge appears). The grimoire's output is still deterministic, and the preview shows exactly what will fly. Chanting at least 2 × order terms pins the trajectory down uniquely (a **locked** badge).
 - Defeat every enemy within the MP budget to clear the stage; match the reference MP for the top rank.
+- After the three handcrafted stages, hit the "∞" button for endless mode: **stage 4 and beyond are generated procedurally, forever**. Later stages bring more spell archetypes, more enemies, ally traps, and tighter MP budgets.
 
 ## The algorithm inside
 
@@ -19,6 +20,7 @@ Berlekamp–Massey referees everything.
 - **MP cost**: the minimal-order recurrence is recovered exactly over the rationals (BigInt fractions). Since any N-term sequence fits some recurrence of order about ⌈N/2⌉, "list every enemy level and one-shot the board" is always expensive — the game balance falls out of the theorem itself.
 - **Trajectory extension**: the recovered recurrence extends the sequence, stopping when a term turns non-integral (dissipate), leaves the 1–99 board (out of bounds), or hits a safety cap for periodic sequences.
 - **Uniqueness badge**: the classical theorem "the minimal recurrence is unique iff N ≥ 2L" is rendered directly as UI. For example `1, 2, 4, 7` has N = 4, L = 3 and infinitely many minimal solutions (second differences +1, tribonacci, and more), so its badge turns amber.
+- **Endless stage generation**: stages 4+ are built constructively — solution spells (arithmetic sweep, geometric sweep, fractional-ratio pair, single snipe, bent arithmetic) are generated first, and enemies are harvested from their actual trajectories. Each candidate solution is replayed through the same `traj()` referee the player faces, so an unsolvable stage cannot exist. A PRNG seeded by the stage number makes every stage deterministic (the same stage number is always the same puzzle), and your furthest stage is remembered in the browser.
 
 ## Development
 
