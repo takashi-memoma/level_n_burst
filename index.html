@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>レベル f(n) バースト — 漸化式パズル</title>
+<meta name="description" content="数列を唱えると Berlekamp–Massey が最小の漸化式を見破り、その軌道で敵を撃ち抜くパズルゲーム。">
+<style>
+:root{
+  --bg:#0d0f1e;
+  --panel:#161930;
+  --panel-2:#1d2140;
+  --border:#2a2f55;
+  --border-strong:#3d4478;
+  --ink:#e9e8f6;
+  --ink-2:#a9adcd;
+  --ink-3:#767b9e;
+  --spell:#7fb0ff;
+  --spell-deep:#1c2a52;
+  --enemy:#ff8578;
+  --enemy-deep:#3a1e22;
+  --ally:#63d1a2;
+  --ally-deep:#15342b;
+  --warn:#f2c05c;
+  --warn-deep:#3a2f14;
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  --serif:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP",system-ui,sans-serif;
+  line-height:1.7;
+  min-height:100vh;
+}
+.wrap{max-width:760px;margin:0 auto;padding:2.5rem 1.25rem 4rem}
+header{margin-bottom:1.75rem}
+h1{
+  font-family:var(--serif);
+  font-weight:600;
+  font-size:2rem;
+  letter-spacing:.06em;
+  line-height:1.3;
+}
+h1 .fn{color:var(--spell);font-style:italic}
+.tagline{color:var(--ink-2);font-size:.9rem;margin-top:.35rem}
+details.rules{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:.8rem 1.1rem;
+  margin-bottom:1.25rem;
+  font-size:.86rem;
+  color:var(--ink-2);
+}
+details.rules summary{cursor:pointer;color:var(--ink);font-weight:600;font-size:.9rem}
+details.rules ul{margin:.6rem 0 .2rem 1.2rem}
+details.rules li{margin:.25rem 0}
+details.rules b{color:var(--ink);font-weight:600}
+.stagebar{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem}
+button{
+  font:inherit;
+  font-size:.88rem;
+  color:var(--ink);
+  background:var(--panel);
+  border:1px solid var(--border-strong);
+  border-radius:8px;
+  padding:.4rem 1rem;
+  cursor:pointer;
+  transition:background .12s,border-color .12s,transform .05s;
+}
+button:hover{background:var(--panel-2)}
+button:active{transform:scale(.98)}
+button:focus-visible{outline:2px solid var(--spell);outline-offset:2px}
+button.on{border-color:var(--spell);color:var(--spell)}
+button.primary{background:var(--spell-deep);border-color:var(--spell);color:var(--spell);font-weight:600}
+button.primary:hover{background:#233462}
+.panel{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:1.1rem 1.3rem;
+  margin-bottom:1rem;
+}
+.panel-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem}
+.stname{font-weight:600;font-size:1.02rem}
+.mp{font-family:var(--mono);font-size:.95rem;color:var(--ink-2)}
+.mp b{color:var(--ink);font-weight:600}
+.mp b.low{color:var(--enemy)}
+.hint{font-size:.8rem;color:var(--ink-3);margin:.3rem 0 .8rem}
+.board{display:flex;flex-wrap:wrap;gap:.5rem}
+.chip{
+  font-family:var(--mono);
+  font-size:.88rem;
+  padding:.32rem .8rem;
+  border-radius:8px;
+  transition:opacity .4s;
+}
+.chip.enemy{background:var(--enemy-deep);color:var(--enemy)}
+.chip.ally{background:var(--ally-deep);color:var(--ally)}
+.chip.dead{opacity:.28;text-decoration:line-through}
+.chantrow{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.35rem}
+input[type=text]{
+  flex:1;
+  min-width:180px;
+  font-family:var(--mono);
+  font-size:.95rem;
+  color:var(--ink);
+  background:var(--panel);
+  border:1px solid var(--border-strong);
+  border-radius:8px;
+  padding:.45rem .8rem;
+}
+input[type=text]:focus{outline:2px solid var(--spell);outline-offset:1px;border-color:var(--spell)}
+input[type=text]::placeholder{color:var(--ink-3)}
+.preview{
+  font-family:var(--mono);
+  font-size:.78rem;
+  color:var(--ink-3);
+  min-height:1.6rem;
+  margin-bottom:.9rem;
+  word-break:break-all;
+}
+.preview .warn-t{color:var(--warn)}
+.badge{
+  display:inline-block;
+  font-family:inherit;
+  font-size:.7rem;
+  padding:.05rem .55rem;
+  border-radius:6px;
+  vertical-align:1px;
+  margin-right:.3rem;
+}
+.badge.ok{background:var(--ally-deep);color:var(--ally)}
+.badge.amb{background:var(--warn-deep);color:var(--warn)}
+.anspanel{
+  background:var(--panel-2);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:1rem 1.3rem;
+  margin-bottom:1rem;
+  display:none;
+}
+.anspanel .head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:.4rem}
+.anspanel .head span{font-weight:600;font-size:.92rem}
+.ansrow{padding:.55rem 0;font-size:.85rem;color:var(--ink-2)}
+.ansrow + .ansrow{border-top:1px solid var(--border)}
+.ansrow .sp{
+  font-family:var(--mono);
+  font-weight:600;
+  font-size:.88rem;
+  background:var(--spell-deep);
+  color:var(--spell);
+  padding:.1rem .7rem;
+  border-radius:6px;
+  margin-right:.5rem;
+}
+.ansrow .cost{font-size:.75rem;color:var(--ink-3);margin-right:.4rem}
+.anstotal{padding-top:.55rem;border-top:1px solid var(--border);font-weight:600;font-size:.85rem}
+.banner{
+  display:none;
+  border-radius:12px;
+  padding:.8rem 1.3rem;
+  margin-bottom:1rem;
+  font-size:.95rem;
+  font-weight:600;
+}
+.banner.ok{background:var(--ally-deep);color:var(--ally)}
+.banner.bad{background:var(--enemy-deep);color:var(--enemy)}
+.logent{border-top:1px solid var(--border);padding:.7rem 0;font-size:.85rem}
+.logent .lhead{margin-bottom:.25rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.logent .lhead .nm{font-weight:600}
+.logent .lhead .meta{color:var(--ink-2)}
+.logent .lhead .ff{color:var(--warn)}
+.t{
+  display:inline-block;
+  font-family:var(--mono);
+  font-size:.78rem;
+  padding:.05rem .5rem;
+  margin:.12rem .18rem .12rem 0;
+  border-radius:5px;
+  background:var(--panel);
+  color:var(--ink-3);
+  animation:pop .25s both;
+}
+.t.hit{background:var(--enemy-deep);color:var(--enemy);font-weight:600}
+.t.fr{background:var(--warn-deep);color:var(--warn);font-weight:600}
+.t.ext{border:1px dashed var(--border-strong)}
+.tail{font-size:.75rem;color:var(--ink-3)}
+@keyframes pop{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+  .t{animation:none}
+  .chip{transition:none}
+}
+footer{
+  margin-top:2.5rem;
+  padding-top:1rem;
+  border-top:1px solid var(--border);
+  font-size:.78rem;
+  color:var(--ink-3);
+}
+footer a{color:var(--spell);text-decoration:none}
+footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>レベル <span class="fn">f(n)</span> バースト</h1>
+  <p class="tagline">数列を唱えよ。呪文書が漸化式を見破り、その軌道が敵を貫く。</p>
+</header>
+
+<details class="rules">
+  <summary>ルール（はじめての人はここを開く）</summary>
+  <ul>
+    <li>数字をカンマ区切りで唱えると、呪文書（Berlekamp–Massey）がその数列の<b>最小の漸化式</b>を見破ります。漸化式の長さ（位数）＝<b>消費MP</b>です。</li>
+    <li>魔法の軌道上のレベルを持つ敵は全滅。ただし魔法は<b>詠唱を止めたあとも漸化式のまま飛び続けます</b>。延長線上に仲間がいたら直撃、回復に2MP。</li>
+    <li>次の項が<b>分数</b>になると魔法は霧散し、<b>レベル99を超える</b>と場外へ消えます。これを使って軌道をわざと自壊させるのが上級テクです。</li>
+    <li>詠唱した項数が位数の2倍未満だと、ルールの解釈が複数残ります（<b>解釈複数</b>バッジ）。その場合も呪文書の解釈は毎回同じなので、プレビューの軌道を信じてOK。</li>
+    <li>残りMP以内で敵を全滅させればクリア。見本MP以下なら魔道士級！</li>
+  </ul>
+</details>
+
+<div class="stagebar" id="stagebtns"></div>
+
+<div class="panel">
+  <div class="panel-head">
+    <span class="stname" id="stname"></span>
+    <span class="mp" id="mpnow"></span>
+  </div>
+  <div class="hint" id="hint"></div>
+  <div class="board" id="board"></div>
+</div>
+
+<div class="chantrow">
+  <input type="text" id="chant" placeholder="例: 3, 6, 9" autocomplete="off">
+  <button class="primary" id="cast">詠唱</button>
+  <button id="reset" aria-label="ステージをやり直す">やり直す</button>
+  <button id="ansbtn">答えを見る</button>
+</div>
+<div class="preview" id="preview"></div>
+
+<div class="anspanel" id="anspanel">
+  <div class="head">
+    <span>想定解</span>
+    <button id="autoplay">見本を自動詠唱</button>
+  </div>
+  <div id="anslist"></div>
+</div>
+
+<div class="banner" id="banner"></div>
+<div id="log"></div>
+
+<footer>
+  <p>アルゴリズム: Berlekamp–Massey（最小線形漸化式の復元）。着想:
+    <a href="https://info.atcoder.jp/entry/algorithm_lectures/linearly_recurrent_sequence_reconstruction" target="_blank" rel="noopener">AtCoder Algorithm Lectures「線形漸化式の復元」</a> /
+    <a href="https://info.atcoder.jp/entry/algorithm_lectures/linearly_recurrent_sequence_kth_term" target="_blank" rel="noopener">「線形漸化的数列の第 K 項」</a>
+  </p>
+  <p>某RPGの「レベルを条件に全体へ作用する青魔法」へのオマージュです（名称・内容はオリジナル）。</p>
+</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+function bgcd(a,b){a=a<0n?-a:a;b=b<0n?-b:b;while(b){const t=a%b;a=b;b=t;}return a;}
+function F(n,d){d=d===undefined?1n:d;if(d<0n){n=-n;d=-d;}const g=bgcd(n,d)||1n;return{n:n/g,d:d/g};}
+const f0=F(0n),f1=F(1n);
+function fadd(a,b){return F(a.n*b.d+b.n*a.d,a.d*b.d);}
+function fsub(a,b){return F(a.n*b.d-b.n*a.d,a.d*b.d);}
+function fmul(a,b){return F(a.n*b.n,a.d*b.d);}
+function fdiv(a,b){return F(a.n*b.d,a.d*b.n);}
+
+// Berlekamp–Massey over the rationals (exact BigInt fractions).
+function bm(S){
+  let Q=[f1],L=0,B=[f1],n0=-1,b=f1;
+  for(let n=0;n<S.length;n++){
+    let d=f0;
+    for(let j=0;j<Q.length&&j<=n;j++)d=fadd(d,fmul(Q[j],S[n-j]));
+    if(d.n===0n)continue;
+    const cf=fdiv(d,b),sh=n-n0,Qn=Q.slice();
+    while(Qn.length<sh+B.length)Qn.push(f0);
+    for(let j=0;j<B.length;j++)Qn[sh+j]=fsub(Qn[sh+j],fmul(cf,B[j]));
+    if(2*L<=n){const Ln=n+1-L;B=Q.slice();n0=n;b=d;L=Ln;}
+    Q=Qn;
+  }
+  return{L:L,Q:Q};
+}
+
+// Extend the chanted terms along the recovered recurrence.
+// Stops when a term becomes fractional ("dissipate"), leaves 1..99 ("out of bounds"),
+// or after a safety cap for periodic sequences.
+function traj(T){
+  const S=T.map(function(v){return F(v);});
+  const r=bm(S);
+  const c=[];
+  for(let j=1;j<=r.L;j++)c.push(j<r.Q.length?F(-r.Q[j].n,r.Q[j].d):f0);
+  const arr=S.slice(),path=T.slice();
+  let end="";
+  if(r.L>0){
+    for(let t=0;t<60;t++){
+      let v=f0;const i=arr.length;
+      for(let j=1;j<=r.L;j++)v=fadd(v,fmul(c[j-1],arr[i-j]));
+      if(v.d!==1n){end="dis";break;}
+      const av=v.n<0n?-v.n:v.n;
+      if(av>99n){end="out";break;}
+      arr.push(v);path.push(v.n);
+      if(path.length>=40){end="loop";break;}
+    }
+  }
+  return{cost:Math.max(1,r.L),L:r.L,path:path,end:end,unique:2*r.L<=T.length};
+}
+
+const stages=[
+ {name:"ステージ1 スライム講習会",enemies:[3,6,9,12,15],allies:[],mp:3,par:2,
+  hint:"ヒント: 等差数列は3つ唱えれば軌道が伝わる。あとは勝手に飛んでいく。",
+  sol:[{t:[3n,6n,9n,12n],why:"「+3の等差」（位数2）。4つ唱えると 位数×2 ＝ 4項に達し、軌道が一意に確定（緑バッジ）。軌道は15以降も99まで自動で掃く。実は3つでも呪文書は同じ解釈をするので2MPでクリアできる。"}]},
+ {name:"ステージ2 毒キノコの罠",enemies:[5,10,15,20,40,80],allies:[25],mp:3,par:2,
+  hint:"ヒント: 足し算の軌道は仲間を貫く。掛け算なら…?",
+  sol:[{t:[5n,10n,20n],why:"「×2の等比」は位数1で1MP。軌道は40, 80を撃ち抜き160で場外。25の仲間は飛び越える。"},
+       {t:[15n],why:"1つだけ唱えると呪文書は「×15の等比」と解釈（解釈複数の状態だが決定的）。次項225は場外なので単体スナイプになる。"}]},
+ {name:"ステージ3 フィボナッチの亡霊",enemies:[2,3,5,8,13,21,34,89],allies:[55],mp:6,par:4,
+  hint:"ヒント: 一掃したくなる並びだが延長線が危険。軌道は途中で折り曲げて自壊させられる。2つの数だけ唱えた魔法は必ず1MP。",
+  sol:[{t:[2n,5n],why:"2つだけなら「×5/2の等比」で1MP（2項・位数1なので軌道は一意に確定）。次項12.5は分数なので即霧散。"},
+       {t:[3n,8n,13n,21n],why:"最初は+5の等差に見せて、4項目の21で軌道をねじ曲げる。位数2（係数41/25と−1/25）になり、次項848/25で霧散。55の仲間には永遠に届かない。"},
+       {t:[34n,89n],why:"「×89/34の等比」で1MP。次項は分数で霧散。フィボナッチの残党を安全に始末。"}]}
+];
+let si=0,alive=[],mpUsed=0,dead=false,playing=false;
+
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+function uqBadge(r){
+  if(r.unique)return '<span class="badge ok">軌道確定</span>';
+  return '<span class="badge amb">解釈複数（'+(2*r.L)+'項で確定）</span>';
+}
+
+const sb=$("stagebtns");
+stages.forEach(function(s,i){
+  const b=document.createElement("button");
+  b.textContent=(i+1)+" 面";
+  b.onclick=function(){if(playing)return;si=i;initStage();};
+  sb.appendChild(b);
+});
+
+function initStage(){
+  const s=stages[si];
+  alive=s.enemies.map(function(){return true;});
+  mpUsed=0;dead=false;
+  $("log").innerHTML="";
+  $("banner").style.display="none";
+  $("chant").value="";
+  $("preview").textContent="";
+  $("anspanel").style.display="none";
+  Array.prototype.forEach.call(sb.children,function(b,i){
+    b.className=i===si?"on":"";
+  });
+  render();
+}
+
+function render(){
+  const s=stages[si];
+  $("stname").textContent=s.name;
+  $("hint").textContent=s.hint;
+  const left=s.mp-mpUsed;
+  $("mpnow").innerHTML='MP <b class="'+(left<=1?"low":"")+'">'+left+"</b> / "+s.mp;
+  const bd=$("board");bd.innerHTML="";
+  s.enemies.forEach(function(lv,i){
+    const c=document.createElement("span");
+    c.className="chip enemy"+(alive[i]?"":" dead");
+    c.textContent="☠ Lv "+lv;
+    bd.appendChild(c);
+  });
+  s.allies.forEach(function(lv){
+    const c=document.createElement("span");
+    c.className="chip ally";
+    c.textContent="♥ 仲間 Lv "+lv;
+    bd.appendChild(c);
+  });
+}
+
+function parse(){
+  const toks=$("chant").value.trim().split(/[,、\s]+/).filter(function(x){return x.length;});
+  if(!toks.length)return null;
+  try{return toks.map(function(t){if(!/^-?\d+$/.test(t))throw 0;return BigInt(t);});}catch(e){return null;}
+}
+
+$("chant").addEventListener("input",function(){
+  const T=parse(),pv=$("preview");
+  if(!T){pv.textContent="";return;}
+  const s=stages[si],r=traj(T);
+  const shown=r.path.slice(0,18).map(function(v){return v.toString();}).join(" › ");
+  const tail=r.end==="dis"?" › 霧散":r.end==="out"?" › 場外":r.path.length>18?" › …":"";
+  let warn="";
+  s.allies.forEach(function(lv){if(r.path.some(function(v){return v===BigInt(lv);}))warn=" ／ 仲間に直撃コース！";});
+  pv.innerHTML=uqBadge(r)+"消費MP "+r.cost+"（位数"+r.L+"）／ 軌道: "+esc(shown+tail)+'<span class="warn-t">'+esc(warn)+"</span>";
+});
+
+function doCast(T){
+  if(dead)return;
+  const s=stages[si],r=traj(T),left=s.mp-mpUsed;
+  if(r.cost>left){flash("MPが足りない！（必要"+r.cost+" / 残り"+left+"）");return;}
+  mpUsed+=r.cost;
+  const hitset={};
+  r.path.forEach(function(v){if(v>0n&&v<=99n)hitset[v.toString()]=true;});
+  let kills=0,friendly=false;
+  s.enemies.forEach(function(lv,i){
+    if(alive[i]&&hitset[String(lv)]){alive[i]=false;kills++;}
+  });
+  s.allies.forEach(function(lv){if(hitset[String(lv)])friendly=true;});
+  if(friendly)mpUsed+=2;
+  addLog(T,r,kills,friendly);
+  const allDead=s.enemies.every(function(_,i){return !alive[i];});
+  if(allDead&&mpUsed<=s.mp){
+    const rank=mpUsed<=s.par?"魔道士級！最適解です":mpUsed<=s.par+1?"見事！":"クリア！";
+    banner("✦ "+rank+" 消費 "+mpUsed+" MP（見本 "+s.par+" MP）","ok");
+  }else if(mpUsed>=s.mp&&!allDead){
+    dead=true;
+    banner("MP切れ…敵が残っています。「やり直す」で再挑戦！","bad");
+  }
+  render();
+}
+
+$("cast").onclick=function(){
+  if(playing)return;
+  const T=parse();
+  if(!T){$("preview").textContent="整数をカンマ区切りで唱えてください";return;}
+  doCast(T);
+  $("chant").value="";$("preview").textContent="";
+};
+$("chant").addEventListener("keydown",function(e){if(e.key==="Enter")$("cast").onclick();});
+$("reset").onclick=function(){if(playing)return;initStage();};
+
+$("ansbtn").onclick=function(){
+  const p=$("anspanel");
+  if(p.style.display==="block"){p.style.display="none";return;}
+  const s=stages[si],list=$("anslist");
+  list.innerHTML="";
+  let total=0;
+  s.sol.forEach(function(c){
+    const r=traj(c.t);total+=r.cost;
+    const row=document.createElement("div");
+    row.className="ansrow";
+    const chant=c.t.map(function(v){return v.toString();}).join(", ");
+    row.innerHTML='<div><span class="sp">'+esc(chant)+'</span><span class="cost">'+r.cost+" MP</span>"+uqBadge(r)+"</div><div>"+esc(c.why)+"</div>";
+    list.appendChild(row);
+  });
+  const tot=document.createElement("div");
+  tot.className="anstotal";
+  tot.textContent="合計 "+total+" MP";
+  list.appendChild(tot);
+  p.style.display="block";
+};
+
+$("autoplay").onclick=function(){
+  if(playing)return;
+  playing=true;
+  const s=stages[si];
+  alive=s.enemies.map(function(){return true;});
+  mpUsed=0;dead=false;
+  $("log").innerHTML="";
+  $("banner").style.display="none";
+  render();
+  s.sol.forEach(function(c,i){
+    setTimeout(function(){
+      $("chant").value=c.t.map(function(v){return v.toString();}).join(", ");
+      $("chant").dispatchEvent(new Event("input"));
+      setTimeout(function(){
+        doCast(c.t);
+        $("chant").value="";$("preview").textContent="";
+        if(i===s.sol.length-1)playing=false;
+      },800);
+    },i*1800);
+  });
+};
+
+function banner(msg,kind){
+  const b=$("banner");
+  b.style.display="block";
+  b.textContent=msg;
+  b.className="banner "+kind;
+}
+function flash(msg){$("preview").innerHTML='<span class="warn-t">'+esc(msg)+"</span>";}
+
+function addLog(T,r,kills,friendly){
+  const s=stages[si],typedN=T.length;
+  const e=document.createElement("div");
+  e.className="logent";
+  let chips="";
+  r.path.slice(0,24).forEach(function(v,i){
+    const pos=v>0n&&v<=99n;
+    const num=pos?Number(v):-1;
+    const isE=pos&&s.enemies.indexOf(num)>=0;
+    const isA=pos&&s.allies.indexOf(num)>=0;
+    let cls="t";
+    if(isA)cls+=" fr";else if(isE)cls+=" hit";
+    if(i>=typedN)cls+=" ext";
+    chips+='<span class="'+cls+'" style="animation-delay:'+(i*45)+'ms">'+v.toString()+"</span>";
+  });
+  const tail=r.end==="dis"?'<span class="tail">霧散</span>':r.end==="out"?'<span class="tail">場外へ</span>':r.path.length>24?'<span class="tail">…</span>':"";
+  e.innerHTML='<div class="lhead"><span class="nm">レベル f(n) バースト</span>'+uqBadge(r)+'<span class="meta">位数'+r.L+" ＝ "+r.cost+" MP — "+kills+"体撃破</span>"+(friendly?'<span class="ff">仲間に直撃！回復に+2MP</span>':"")+"</div><div>"+chips+tail+"</div>";
+  $("log").prepend(e);
+}
+
+initStage();
+})();
+</script>
+</body>
+</html>
