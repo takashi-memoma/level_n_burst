@@ -251,9 +251,9 @@ footer a:hover{text-decoration:underline}
   <summary>ルール（はじめての人はここを開く）</summary>
   <ul>
     <li>数字をカンマ区切りで唱えると、呪文書（Berlekamp–Massey）がその数列の<b>最小の漸化式</b>を見破ります。漸化式の長さ（位数）＝<b>消費MP</b>です。</li>
-    <li>入力方法は2つ。<b>パネル選択モード</b>は漸化式パネル（第1〜4項のヒント付き）を選んで「詠唱」、<b>クラシックモード</b>は数字を直接入力。上のボタンでいつでも切替できます。</li>
-    <li>魔法の軌道上のレベルを持つ敵は全滅。ただし魔法は<b>詠唱を止めたあとも漸化式のまま飛び続けます</b>。延長線上に仲間がいたら直撃、回復に2MP。</li>
-    <li>次の項が<b>分数</b>になると魔法は霧散し、<b>レベル99を超える</b>と場外へ消えます。これを使って軌道をわざと自壊させるのが上級テクです。</li>
+    <li>入力方法は2つ。<b>パネル選択モード</b>は漸化式パネル（第1〜4項のヒント付き）を選んで「詠唱」、<b>クラシックモード</b>は数字を直接入力。上のボタンでいつでも切替できます。パネル選択モードは<b>位数3以上</b>の高位数パズル専用で、「問題をつくる」から最低位数を指定して難易度を試せます。</li>
+    <li>魔法の軌道上のレベルを持つ敵は全滅。ただし魔法は<b>詠唱を止めたあとも漸化式のまま飛び続けます</b>。延長線上に仲間（♥）がいたら直撃、回復に2MP。</li>
+    <li>次の項が<b>分数</b>になると魔法は霧散し、<b>レベル上限（クラシックは99、高位数モードは9999）を超える</b>と場外へ消えます。これを使って軌道をわざと自壊させるのが上級テクです。</li>
     <li>詠唱した項数が位数の2倍未満だと、ルールの解釈が複数残ります（<b>解釈複数</b>バッジ）。その場合も呪文書の解釈は毎回同じなので、プレビューの軌道を信じてOK。</li>
     <li>残りMP以内で敵を全滅させればクリア。見本MP以下なら魔道士級！</li>
     <li>3面まではチュートリアル。<b>4面以降は自動生成で無限に続きます</b>（同じ面番号はいつでも同じ問題）。</li>
@@ -341,9 +341,12 @@ function bm(S){
 }
 
 // Extend the chanted terms along the recovered recurrence.
-// Stops when a term becomes fractional ("dissipate"), leaves 1..99 ("out of bounds"),
-// or after a safety cap for periodic sequences.
-function traj(T){
+// Stops when a term becomes fractional ("dissipate"), leaves 1..maxlv ("out of
+// bounds"), or after a safety cap for periodic sequences. maxlv is the board's
+// top level: 99 for classic/endless, up to 9999 for high-order panel stages.
+const BOARD=99;
+function traj(T,maxlv){
+  const M=BigInt(maxlv||BOARD);
   const S=T.map(function(v){return F(v);});
   const r=bm(S);
   const c=[];
@@ -356,7 +359,7 @@ function traj(T){
       for(let j=1;j<=r.L;j++)v=fadd(v,fmul(c[j-1],arr[i-j]));
       if(v.d!==1n){end="dis";break;}
       const av=v.n<0n?-v.n:v.n;
-      if(av>99n){end="out";break;}
+      if(av>M){end="out";break;}
       arr.push(v);path.push(v.n);
       if(path.length>=40){end="loop";break;}
     }
@@ -380,9 +383,9 @@ function mulberry32(seed){
 function ri(rnd,lo,hi){return lo+Math.floor(rnd()*(hi-lo+1));}
 function pick(rnd,arr){return arr[Math.floor(rnd()*arr.length)];}
 function igcd(a,b){while(b){const t=a%b;a=b;b=t;}return a;}
-function hitsOf(r){
-  const h=[];
-  r.path.forEach(function(v){if(v>0n&&v<=99n)h.push(Number(v));});
+function hitsOf(r,maxlv){
+  const M=BigInt(maxlv||BOARD),h=[];
+  r.path.forEach(function(v){if(v>0n&&v<=M)h.push(Number(v));});
   return h;
 }
 
@@ -476,13 +479,13 @@ function curveFor(n,rnd){
 // Replays a stage's own sol through traj() and checks it actually wins:
 // every enemy dies, no ally is hit, and the total cost matches par.
 function simulate(st){
-  const killed={};
+  const killed={},M=BigInt(st.maxlv||BOARD);
   let cost=0,ff=false;
   st.sol.forEach(function(c){
-    const r=traj(c.t);
+    const r=traj(c.t,st.maxlv);
     cost+=r.cost;
     r.path.forEach(function(v){
-      if(v>0n&&v<=99n){
+      if(v>0n&&v<=M){
         const num=Number(v);
         if(st.enemies.indexOf(num)>=0)killed[num]=true;
         if(st.allies.indexOf(num)>=0)ff=true;
@@ -603,45 +606,50 @@ function genStage(n){
 }
 
 /* ===HI-ORDER=== */
+// High-order panel stages play on a taller board so the richer recurrences have
+// room to roam: enemy and ally levels may reach HIMAX (9999), while classic and
+// endless stages keep the proven 1..99 board.
+const HIMAX=9999;
 // Panel mode's dedicated high-order puzzles. A random small-integer linear
 // recurrence of order K is drawn, its orbit simulated; the first 2K in-range
 // terms become the chant so Berlekamp–Massey locks onto order K, and the whole
-// thing is verified with traj() — the same referee the player faces. Yields are
-// high for K up to 6 because ±2 coefficients keep the orbit inside 1..99 for a
-// while before it flies off the board.
-function mkHi(rnd,minOrder){
-  const CR=2;
-  for(let att=0;att<120;att++){
+// thing is verified with traj() — the same referee the player faces.
+function mkHi(rnd,minOrder,maxlv){
+  const CR=2,M=maxlv||HIMAX;
+  for(let att=0;att<160;att++){
     const K=minOrder,c=[];
     for(let j=0;j<K;j++)c.push(ri(rnd,-CR,CR));
     if(c[K-1]===0)c[K-1]=pick(rnd,[-1,1,2,-2]);
     const orbit=[];
     for(let j=0;j<K;j++)orbit.push(ri(rnd,1,14));
-    let exited=false,bad=false;
+    let bad=false;
     for(let step=0;step<50;step++){
       let v=0;
       for(let j=1;j<=K;j++)v+=c[j-1]*orbit[orbit.length-j];
       if(!Number.isSafeInteger(v)){bad=true;break;}
-      if(Math.abs(v)>99){exited=true;break;}
+      if(Math.abs(v)>M)break;
       orbit.push(v);
       if(orbit.length>=40)break;
     }
-    if(bad||!exited||orbit.length<2*K+1)continue;
+    if(bad||orbit.length<2*K+1)continue;
     const t=orbit.slice(0,2*K).map(function(x){return BigInt(x);});
-    if(t.some(function(x){return x<1n||x>99n;}))continue;
-    const r=traj(t);
+    if(t.some(function(x){return x<1n||x>BigInt(M);}))continue;
+    const r=traj(t,M);
     if(r.L<minOrder||r.end==="")continue;
-    const hits=hitsOf(r);
+    const hits=hitsOf(r,M);
     if(new Set(hits).size<Math.max(3,minOrder))continue;
     return{t:t,cost:r.cost,hits:hits,arch:"hi",
       why:"位数"+r.L+"の漸化式。"+t.slice(0,4).map(function(x){return x.toString();}).join(", ")+"… と続き、軌道が敵をまとめて貫く。"};
   }
   return null;
 }
-function tryGenHi(n,rnd,minOrder){
+function tryGenHi(n,rnd,minOrder,maxlv){
   // One order>=minOrder spell whose orbit is the whole enemy set: the puzzle is
   // to pick that single correct recurrence out of equally high-order decoys.
-  const sp=mkHi(rnd,minOrder);
+  // Allies are levels off the solution's orbit (never hit by the correct spell)
+  // that a careless wrong pick can still strike for the +2 MP penalty.
+  const M=maxlv||HIMAX;
+  const sp=mkHi(rnd,minOrder,M);
   if(!sp)return null;
   let enemies=Array.from(new Set(sp.hits)).sort(function(a,b){return a-b;});
   if(enemies.length<4)return null;
@@ -650,11 +658,19 @@ function tryGenHi(n,rnd,minOrder){
     for(let i=arr.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1)),tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;}
     enemies=arr.slice(0,10).sort(function(a,b){return a-b;});
   }
+  const solPath=new Set(traj(sp.t,M).path.map(function(v){return Number(v);}));
+  const allies=[],lo=Math.max(1,enemies[0]-2),hi=Math.min(M,Math.max(enemies[enemies.length-1],enemies[0]+30));
+  const want=ri(rnd,1,2);
+  for(let tr=0;tr<120&&allies.length<want;tr++){
+    const v=ri(rnd,lo,hi);
+    if(v>=1&&!solPath.has(v)&&enemies.indexOf(v)<0&&allies.indexOf(v)<0)allies.push(v);
+  }
+  allies.sort(function(a,b){return a-b;});
   const par=sp.cost;
   const st={
     name:"高位数の試練 #"+n+"（最低位数"+minOrder+"）",
-    enemies:enemies,allies:[],mp:par,par:par,
-    hint:"ヒント: 位数"+minOrder+"以上の漸化式。正しい1本を選べば、その軌道が敵をまとめて貫く。外すとMP切れ。",
+    enemies:enemies,allies:allies,mp:par,par:par,maxlv:M,
+    hint:"ヒント: 位数"+minOrder+"以上の漸化式。正しい1本を選べば軌道が敵をまとめて貫く。外すとMP切れ。"+(allies.length?"延長線上の仲間（♥）に当てると回復に+2MP。":""),
     sol:[{t:sp.t,why:sp.why}],
     minOrder:minOrder
   };
@@ -755,8 +771,8 @@ function fmtTerms(r){
   if(r.path.length>4)return s+", …";
   return s+(r.end==="dis"?" › 霧散":r.end==="out"?" › 場外":", …");
 }
-function mkPanel(t){
-  const r=traj(t);
+function mkPanel(t,maxlv){
+  const r=traj(t,maxlv);
   return{t:t,r:r,key:r.path.join(",")+"|"+r.end,rec:fmtRec(t),terms:fmtTerms(r)};
 }
 
@@ -766,21 +782,21 @@ function mkPanel(t){
 // so the player only ever chooses among order-3+ recurrences. Otherwise decoys
 // are near misses of a sol chant, ally traps, or unrelated spells.
 function buildPanels(st,seed){
-  const rnd=mulberry32(seed>>>0);
+  const rnd=mulberry32(seed>>>0),maxlv=st.maxlv||BOARD;
   const minOrd=st.minOrder||0;
-  const all=st.sol.map(function(c){return mkPanel(c.t);});
+  const all=st.sol.map(function(c){return mkPanel(c.t,maxlv);});
   const seen=new Set(all.map(function(p){return p.key;}));
   const need=Math.max(3,6-all.length);
   let made=0,guard=0;
   function tryAdd(t){
-    const p=mkPanel(t);
+    const p=mkPanel(t,maxlv);
     if(seen.has(p.key)||p.r.cost>st.mp)return;
     if(minOrd&&p.r.L<minOrd)return;
     seen.add(p.key);all.push(p);made++;
   }
   while(made<need&&guard++<500){
     if(minOrd>=3){
-      const sp=mkHi(rnd,minOrd);
+      const sp=mkHi(rnd,minOrd,maxlv);
       if(sp)tryAdd(sp.t);
     }else{
       const kind=ri(rnd,0,3);
@@ -891,7 +907,7 @@ function parse(){
 function showPreview(T){
   const pv=$("preview");
   if(!T){pv.textContent="";return;}
-  const s=cur(),r=traj(T);
+  const s=cur(),r=traj(T,s.maxlv);
   const shown=r.path.slice(0,18).map(function(v){return v.toString();}).join(" › ");
   const tail=r.end==="dis"?" › 霧散":r.end==="out"?" › 場外":r.path.length>18?" › …":"";
   let warn="";
@@ -932,9 +948,9 @@ function setMode(m){
   mode=m;
   try{localStorage.setItem("lfnb-mode",m);}catch(e){}
   selIdx=-1;
-  $("chant").value="";
-  showPreview(null);
-  refreshMode();
+  // Panel and classic show different stages (high-order vs classic), so reload
+  // the current-mode stage fresh rather than leaving a stale board.
+  initStage();
 }
 $("modepanel").onclick=function(){setMode("panel");};
 $("modeclassic").onclick=function(){setMode("classic");};
@@ -955,7 +971,7 @@ $("mgen").onclick=function(){
   customSeed=(((seed+1)*0x9E3779B9)^0x4D414B45)>>>0;
   customPanels=null;
   if(mode!=="panel"){mode="panel";try{localStorage.setItem("lfnb-mode","panel");}catch(e){}}
-  const ords=st.sol.map(function(c){return traj(c.t).L;});
+  const ords=st.sol.map(function(c){return traj(c.t,st.maxlv).L;});
   const lo=Math.min.apply(null,ords),hi=Math.max.apply(null,ords);
   $("makerinfo").innerHTML="生成しました：最低位数 "+mo+" ／ 想定解 "+st.sol.length+"本（位数 "+lo+(lo!==hi?"〜"+hi:"")+"） ／ 敵 "+st.enemies.length+"体 ／ 見本 "+st.par+" MP。下のパネルから正しい漸化式を選んで詠唱！";
   selIdx=-1;
@@ -964,11 +980,11 @@ $("mgen").onclick=function(){
 
 function doCast(T){
   if(dead)return;
-  const s=cur(),r=traj(T),left=s.mp-mpUsed;
+  const s=cur(),M=BigInt(s.maxlv||BOARD),r=traj(T,s.maxlv),left=s.mp-mpUsed;
   if(r.cost>left){flash("MPが足りない！（必要"+r.cost+" / 残り"+left+"）");return;}
   mpUsed+=r.cost;
   const hitset={};
-  r.path.forEach(function(v){if(v>0n&&v<=99n)hitset[v.toString()]=true;});
+  r.path.forEach(function(v){if(v>0n&&v<=M)hitset[v.toString()]=true;});
   let kills=0,friendly=false;
   s.enemies.forEach(function(lv,i){
     if(alive[i]&&hitset[String(lv)]){alive[i]=false;kills++;}
@@ -1016,7 +1032,7 @@ $("ansbtn").onclick=function(){
   list.innerHTML="";
   let total=0;
   s.sol.forEach(function(c){
-    const r=traj(c.t);total+=r.cost;
+    const r=traj(c.t,s.maxlv);total+=r.cost;
     const row=document.createElement("div");
     row.className="ansrow";
     const chant=c.t.map(function(v){return v.toString();}).join(", ");
@@ -1079,12 +1095,12 @@ function banner(msg,kind,next){
 function flash(msg){$("preview").innerHTML='<span class="warn-t">'+esc(msg)+"</span>";}
 
 function addLog(T,r,kills,friendly){
-  const s=cur(),typedN=T.length;
+  const s=cur(),typedN=T.length,M=BigInt(s.maxlv||BOARD);
   const e=document.createElement("div");
   e.className="logent";
   let chips="";
   r.path.slice(0,24).forEach(function(v,i){
-    const pos=v>0n&&v<=99n;
+    const pos=v>0n&&v<=M;
     const num=pos?Number(v):-1;
     const isE=pos&&s.enemies.indexOf(num)>=0;
     const isA=pos&&s.allies.indexOf(num)>=0;
