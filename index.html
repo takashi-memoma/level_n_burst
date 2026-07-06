@@ -144,6 +144,21 @@ input[type=text]::placeholder{color:var(--ink-3)}
 .spellcard.sel{border-color:var(--spell);background:var(--spell-deep)}
 .spellcard.sel:hover{background:var(--spell-deep)}
 .spellcard.sel .rec{color:var(--spell)}
+details.maker .makernote{margin:.5rem 0 .2rem;font-size:.82rem}
+.makerrow{display:flex;flex-wrap:wrap;align-items:flex-end;gap:.7rem;margin:.6rem 0 .2rem}
+.makerrow label{display:flex;flex-direction:column;gap:.25rem;font-size:.78rem;color:var(--ink-2)}
+.makerrow input[type=number]{
+  width:9rem;
+  font-family:var(--mono);
+  font-size:.95rem;
+  color:var(--ink);
+  background:var(--panel);
+  border:1px solid var(--border-strong);
+  border-radius:8px;
+  padding:.4rem .7rem;
+}
+.makerrow input[type=number]:focus{outline:2px solid var(--spell);outline-offset:1px;border-color:var(--spell)}
+.makerinfo{font-size:.82rem;color:var(--ally);min-height:1.2rem;margin-top:.3rem}
 .badge{
   display:inline-block;
   font-family:inherit;
@@ -251,6 +266,21 @@ footer a:hover{text-decoration:underline}
   <button id="modepanel">パネル選択</button>
   <button id="modeclassic">クラシック（数字入力）</button>
 </div>
+
+<details class="rules maker" id="makerbox">
+  <summary>問題をつくる（最低位数を指定して難易度を試す）</summary>
+  <p class="makernote">最低位数を上げるほど、パネルに並ぶ漸化式が複雑になり読み解きが難しくなります。生成された問題はパネル選択モードで即プレイできます。</p>
+  <div class="makerrow">
+    <label>最低位数
+      <input type="number" id="minord" min="1" max="6" value="3" inputmode="numeric">
+    </label>
+    <label>シード（任意）
+      <input type="number" id="mseed" placeholder="空欄=毎回ランダム" inputmode="numeric">
+    </label>
+    <button class="primary" id="mgen">この設定で生成</button>
+  </div>
+  <div class="makerinfo" id="makerinfo"></div>
+</details>
 
 <div class="panel">
   <div class="panel-head">
@@ -571,6 +601,77 @@ function genStage(n){
   }
   return fallbackStage(n);
 }
+
+/* ===HI-ORDER=== */
+// Panel mode's dedicated high-order puzzles. A random small-integer linear
+// recurrence of order K is drawn, its orbit simulated; the first 2K in-range
+// terms become the chant so Berlekamp–Massey locks onto order K, and the whole
+// thing is verified with traj() — the same referee the player faces. Yields are
+// high for K up to 6 because ±2 coefficients keep the orbit inside 1..99 for a
+// while before it flies off the board.
+function mkHi(rnd,minOrder){
+  const CR=2;
+  for(let att=0;att<120;att++){
+    const K=minOrder,c=[];
+    for(let j=0;j<K;j++)c.push(ri(rnd,-CR,CR));
+    if(c[K-1]===0)c[K-1]=pick(rnd,[-1,1,2,-2]);
+    const orbit=[];
+    for(let j=0;j<K;j++)orbit.push(ri(rnd,1,14));
+    let exited=false,bad=false;
+    for(let step=0;step<50;step++){
+      let v=0;
+      for(let j=1;j<=K;j++)v+=c[j-1]*orbit[orbit.length-j];
+      if(!Number.isSafeInteger(v)){bad=true;break;}
+      if(Math.abs(v)>99){exited=true;break;}
+      orbit.push(v);
+      if(orbit.length>=40)break;
+    }
+    if(bad||!exited||orbit.length<2*K+1)continue;
+    const t=orbit.slice(0,2*K).map(function(x){return BigInt(x);});
+    if(t.some(function(x){return x<1n||x>99n;}))continue;
+    const r=traj(t);
+    if(r.L<minOrder||r.end==="")continue;
+    const hits=hitsOf(r);
+    if(new Set(hits).size<Math.max(3,minOrder))continue;
+    return{t:t,cost:r.cost,hits:hits,arch:"hi",
+      why:"位数"+r.L+"の漸化式。"+t.slice(0,4).map(function(x){return x.toString();}).join(", ")+"… と続き、軌道が敵をまとめて貫く。"};
+  }
+  return null;
+}
+function tryGenHi(n,rnd,minOrder){
+  // One order>=minOrder spell whose orbit is the whole enemy set: the puzzle is
+  // to pick that single correct recurrence out of equally high-order decoys.
+  const sp=mkHi(rnd,minOrder);
+  if(!sp)return null;
+  let enemies=Array.from(new Set(sp.hits)).sort(function(a,b){return a-b;});
+  if(enemies.length<4)return null;
+  if(enemies.length>10){
+    const arr=enemies.slice();
+    for(let i=arr.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1)),tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;}
+    enemies=arr.slice(0,10).sort(function(a,b){return a-b;});
+  }
+  const par=sp.cost;
+  const st={
+    name:"高位数の試練 #"+n+"（最低位数"+minOrder+"）",
+    enemies:enemies,allies:[],mp:par,par:par,
+    hint:"ヒント: 位数"+minOrder+"以上の漸化式。正しい1本を選べば、その軌道が敵をまとめて貫く。外すとMP切れ。",
+    sol:[{t:sp.t,why:sp.why}],
+    minOrder:minOrder
+  };
+  return simulate(st)?st:null;
+}
+function genHiStage(n,minOrder){
+  minOrder=minOrder||3;
+  for(let mo=minOrder;mo>=1;mo--){
+    for(let at=0;at<60;at++){
+      const st=tryGenHi(n,mulberry32(((n*0x9E3779B9)^(at*0x85EBCA6B)^(mo*0x27D4EB2F))>>>0),mo);
+      if(st)return st;
+    }
+  }
+  return null;
+}
+function minOrderFor(n){return Math.min(6,3+Math.floor((n-1)/6));}
+/* ===/HI-ORDER=== */
 /* ===/GEN-CORE=== */
 
 const stages=[
@@ -595,7 +696,20 @@ function stageAt(i){
   if(!genCache.has(i))genCache.set(i,genStage(i+1));
   return genCache.get(i);
 }
-function cur(){return stageAt(si);}
+// Panel mode has its own dedicated high-order campaign: same stage numbers as
+// the bar, but every stage is a genHiStage whose minimum order grows with depth.
+const hiCache=new Map();
+function panelStageAt(i){
+  if(!hiCache.has(i))hiCache.set(i,genHiStage(i+1,minOrderFor(i+1)));
+  return hiCache.get(i);
+}
+// A one-off puzzle built from the "問題をつくる" page overrides the campaign
+// stage while active (panel mode only).
+let customStage=null,customSeed=0,customPanels=null;
+function cur(){
+  if(mode==="panel")return customStage||panelStageAt(si);
+  return stageAt(si);
+}
 
 // Highest unlocked stage index; clearing stage si unlocks si+1.
 let reached=HAND;
@@ -647,14 +761,13 @@ function mkPanel(t){
 }
 
 // Panels for a stage: every reference solution plus seeded decoys, shuffled.
-// Decoys are real castable spells (verified via traj) built as near misses of
-// a sol chant, ally traps, or unrelated spells from the endless generator.
-// Seeded by the stage index, so the same stage always shows the same panels.
-const panelCache=new Map();
-function panelsFor(idx){
-  if(panelCache.has(idx))return panelCache.get(idx);
-  const st=stageAt(idx);
-  const rnd=mulberry32((((idx+1)*0x9E3779B9)^0x50414E4C)>>>0);
+// Decoys are real castable spells (verified via traj). In a high-order stage
+// (st.minOrder>=3) every panel — solutions and decoys alike — is order>=minOrder,
+// so the player only ever chooses among order-3+ recurrences. Otherwise decoys
+// are near misses of a sol chant, ally traps, or unrelated spells.
+function buildPanels(st,seed){
+  const rnd=mulberry32(seed>>>0);
+  const minOrd=st.minOrder||0;
   const all=st.sol.map(function(c){return mkPanel(c.t);});
   const seen=new Set(all.map(function(p){return p.key;}));
   const need=Math.max(3,6-all.length);
@@ -662,57 +775,74 @@ function panelsFor(idx){
   function tryAdd(t){
     const p=mkPanel(t);
     if(seen.has(p.key)||p.r.cost>st.mp)return;
+    if(minOrd&&p.r.L<minOrd)return;
     seen.add(p.key);all.push(p);made++;
   }
-  while(made<need&&guard++<300){
-    const kind=ri(rnd,0,3);
-    if(kind===0){
-      const t0=pick(rnd,st.sol).t,off=BigInt(pick(rnd,[-3,-2,-1,1,2,3]));
-      const t=t0.map(function(v){return v+off;});
-      if(t.every(function(v){return v>0n&&v<=99n;}))tryAdd(t);
-    }else if(kind===1&&st.allies.length){
-      const A=pick(rnd,st.allies),d=ri(rnd,2,9),a=A-3*d;
-      if(a>=1)tryAdd([a,a+d,a+2*d].map(function(v){return BigInt(v);}));
-    }else{
-      const mk=pick(rnd,[mkArith,mkGeo,mkPair,mkSnipe]),sp=mk(rnd);
+  while(made<need&&guard++<500){
+    if(minOrd>=3){
+      const sp=mkHi(rnd,minOrd);
       if(sp)tryAdd(sp.t);
+    }else{
+      const kind=ri(rnd,0,3);
+      if(kind===0){
+        const t0=pick(rnd,st.sol).t,off=BigInt(pick(rnd,[-3,-2,-1,1,2,3]));
+        const t=t0.map(function(v){return v+off;});
+        if(t.every(function(v){return v>0n&&v<=99n;}))tryAdd(t);
+      }else if(kind===1&&st.allies.length){
+        const A=pick(rnd,st.allies),d=ri(rnd,2,9),a=A-3*d;
+        if(a>=1)tryAdd([a,a+d,a+2*d].map(function(v){return BigInt(v);}));
+      }else{
+        const mk=pick(rnd,[mkArith,mkGeo,mkPair,mkSnipe]),sp=mk(rnd);
+        if(sp)tryAdd(sp.t);
+      }
     }
   }
   for(let i=all.length-1;i>0;i--){
     const j=Math.floor(rnd()*(i+1)),tmp=all[i];all[i]=all[j];all[j]=tmp;
   }
-  panelCache.set(idx,all);
   return all;
+}
+// Panels for the current panel-mode view (custom puzzle or campaign stage si).
+const panelCache=new Map();
+function curPanels(){
+  if(customStage){
+    if(!customPanels)customPanels=buildPanels(customStage,customSeed);
+    return customPanels;
+  }
+  if(!panelCache.has(si))panelCache.set(si,buildPanels(panelStageAt(si),(((si+1)*0x9E3779B9)^0x50414E4C)>>>0));
+  return panelCache.get(si);
 }
 /* ===/PANEL-MODE=== */
 
 const sb=$("stagebtns");
+function goStage(i){customStage=null;si=i;initStage();}
 function refreshBar(){
   sb.innerHTML="";
+  const custom=!!customStage;
   stages.forEach(function(s,i){
     const b=document.createElement("button");
     b.textContent=(i+1)+" 面";
-    if(i===si)b.className="on";
-    b.onclick=function(){if(playing)return;si=i;initStage();};
+    if(!custom&&i===si)b.className="on";
+    b.onclick=function(){if(playing)return;goStage(i);};
     sb.appendChild(b);
   });
   const inf=document.createElement("button");
   inf.textContent=si>=HAND?"∞ "+(si+1)+" 面":"∞ "+(HAND+1)+" 面〜";
-  if(si>=HAND)inf.className="on";
-  inf.onclick=function(){if(playing||si>=HAND)return;si=reached;initStage();};
+  if(!custom&&si>=HAND)inf.className="on";
+  inf.onclick=function(){if(playing)return;goStage(si>=HAND?si:reached);};
   sb.appendChild(inf);
   if(si>=HAND){
     const prev=document.createElement("button");
     prev.textContent="◀";
-    prev.disabled=si<=HAND;
+    prev.disabled=!custom&&si<=HAND;
     prev.setAttribute("aria-label","前の面へ");
-    prev.onclick=function(){if(playing)return;si--;initStage();};
+    prev.onclick=function(){if(playing)return;goStage(custom?si:si-1);};
     sb.appendChild(prev);
     const next=document.createElement("button");
     next.textContent="▶";
-    next.disabled=si>=reached;
+    next.disabled=!custom&&si>=reached;
     next.setAttribute("aria-label","次の面へ");
-    next.onclick=function(){if(playing)return;si++;initStage();};
+    next.onclick=function(){if(playing)return;goStage(si+1);};
     sb.appendChild(next);
   }
 }
@@ -777,7 +907,7 @@ function renderPanels(){
   const pg=$("panelgrid");
   pg.innerHTML="";
   if(mode!=="panel")return;
-  panelsFor(si).forEach(function(p,i){
+  curPanels().forEach(function(p,i){
     const b=document.createElement("button");
     b.className="spellcard"+(i===selIdx?" sel":"");
     b.innerHTML='<span class="rec">'+p.rec+'</span><span class="terms">'+esc(p.terms)+'</span><span class="cost">消費MP '+p.r.cost+"</span>";
@@ -809,6 +939,29 @@ function setMode(m){
 $("modepanel").onclick=function(){setMode("panel");};
 $("modeclassic").onclick=function(){setMode("classic");};
 
+// "問題をつくる": generate a one-off high-order puzzle at the chosen minimum
+// order and drop the player straight into it (panel mode).
+$("mgen").onclick=function(){
+  if(playing)return;
+  let mo=parseInt($("minord").value,10);
+  if(!(mo>=1))mo=3;
+  if(mo>6)mo=6;
+  $("minord").value=mo;
+  let seed=parseInt($("mseed").value,10);
+  if(!Number.isFinite(seed))seed=(Math.random()*1e9)>>>0;
+  const st=genHiStage(seed,mo);
+  if(!st){$("makerinfo").textContent="生成に失敗しました。位数やシードを変えてお試しください。";return;}
+  customStage=st;
+  customSeed=(((seed+1)*0x9E3779B9)^0x4D414B45)>>>0;
+  customPanels=null;
+  if(mode!=="panel"){mode="panel";try{localStorage.setItem("lfnb-mode","panel");}catch(e){}}
+  const ords=st.sol.map(function(c){return traj(c.t).L;});
+  const lo=Math.min.apply(null,ords),hi=Math.max.apply(null,ords);
+  $("makerinfo").innerHTML="生成しました：最低位数 "+mo+" ／ 想定解 "+st.sol.length+"本（位数 "+lo+(lo!==hi?"〜"+hi:"")+"） ／ 敵 "+st.enemies.length+"体 ／ 見本 "+st.par+" MP。下のパネルから正しい漸化式を選んで詠唱！";
+  selIdx=-1;
+  initStage();
+};
+
 function doCast(T){
   if(dead)return;
   const s=cur(),r=traj(T),left=s.mp-mpUsed;
@@ -839,7 +992,7 @@ function doCast(T){
 $("cast").onclick=function(){
   if(playing)return;
   if(mode==="panel"){
-    const ps=panelsFor(si);
+    const ps=curPanels();
     if(selIdx<0||selIdx>=ps.length){flash("パネルを選んでから「詠唱」を押してください");return;}
     const t=ps[selIdx].t;
     selIdx=-1;
@@ -891,7 +1044,7 @@ $("autoplay").onclick=function(){
     setTimeout(function(){
       if(mode==="panel"){
         // Every sol chant is a panel by construction — highlight it.
-        selIdx=panelsFor(si).findIndex(function(p){
+        selIdx=curPanels().findIndex(function(p){
           return p.t.length===c.t.length&&p.t.every(function(v,k){return v===c.t[k];});
         });
         renderPanels();
@@ -919,7 +1072,7 @@ function banner(msg,kind,next){
   if(next){
     const nb=document.createElement("button");
     nb.textContent="次の面へ ▶";
-    nb.onclick=function(){if(playing)return;si++;initStage();};
+    nb.onclick=function(){if(playing)return;goStage(si+1);};
     b.appendChild(nb);
   }
 }
@@ -946,7 +1099,8 @@ function addLog(T,r,kills,friendly){
 }
 
 initStage();
-window.__lnb={genStage:genStage,traj:traj,panelsFor:panelsFor,fmtRec:fmtRec};
+window.__lnb={genStage:genStage,traj:traj,curPanels:curPanels,buildPanels:buildPanels,
+  fmtRec:fmtRec,genHiStage:genHiStage,mkHi:mkHi,minOrderFor:minOrderFor,panelStageAt:panelStageAt};
 })();
 </script>
 </body>
