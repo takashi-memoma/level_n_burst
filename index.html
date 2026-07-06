@@ -127,6 +127,23 @@ input[type=text]::placeholder{color:var(--ink-3)}
   word-break:break-all;
 }
 .preview .warn-t{color:var(--warn)}
+.modebar{display:flex;gap:.5rem;margin-bottom:1rem}
+.panelgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.6rem;margin-bottom:.9rem}
+.spellcard{
+  display:flex;
+  flex-direction:column;
+  gap:.2rem;
+  text-align:left;
+  padding:.6rem .85rem;
+  border-radius:10px;
+}
+.spellcard .rec{font-family:var(--mono);font-size:.86rem;color:var(--ink);word-break:break-all}
+.spellcard .rec sub{font-size:.68em}
+.spellcard .terms{font-family:var(--mono);font-size:.76rem;color:var(--ink-2);word-break:break-all}
+.spellcard .cost{font-size:.7rem;color:var(--ink-3)}
+.spellcard.sel{border-color:var(--spell);background:var(--spell-deep)}
+.spellcard.sel:hover{background:var(--spell-deep)}
+.spellcard.sel .rec{color:var(--spell)}
 .badge{
   display:inline-block;
   font-family:inherit;
@@ -219,6 +236,7 @@ footer a:hover{text-decoration:underline}
   <summary>ルール（はじめての人はここを開く）</summary>
   <ul>
     <li>数字をカンマ区切りで唱えると、呪文書（Berlekamp–Massey）がその数列の<b>最小の漸化式</b>を見破ります。漸化式の長さ（位数）＝<b>消費MP</b>です。</li>
+    <li>入力方法は2つ。<b>パネル選択モード</b>は漸化式パネル（第1〜4項のヒント付き）を選んで「詠唱」、<b>クラシックモード</b>は数字を直接入力。上のボタンでいつでも切替できます。</li>
     <li>魔法の軌道上のレベルを持つ敵は全滅。ただし魔法は<b>詠唱を止めたあとも漸化式のまま飛び続けます</b>。延長線上に仲間がいたら直撃、回復に2MP。</li>
     <li>次の項が<b>分数</b>になると魔法は霧散し、<b>レベル99を超える</b>と場外へ消えます。これを使って軌道をわざと自壊させるのが上級テクです。</li>
     <li>詠唱した項数が位数の2倍未満だと、ルールの解釈が複数残ります（<b>解釈複数</b>バッジ）。その場合も呪文書の解釈は毎回同じなので、プレビューの軌道を信じてOK。</li>
@@ -229,6 +247,11 @@ footer a:hover{text-decoration:underline}
 
 <div class="stagebar" id="stagebtns"></div>
 
+<div class="modebar">
+  <button id="modepanel">パネル選択</button>
+  <button id="modeclassic">クラシック（数字入力）</button>
+</div>
+
 <div class="panel">
   <div class="panel-head">
     <span class="stname" id="stname"></span>
@@ -237,6 +260,8 @@ footer a:hover{text-decoration:underline}
   <div class="hint" id="hint"></div>
   <div class="board" id="board"></div>
 </div>
+
+<div class="panelgrid" id="panelgrid"></div>
 
 <div class="chantrow">
   <input type="text" id="chant" placeholder="例: 3, 6, 9" autocomplete="off">
@@ -565,11 +590,12 @@ const stages=[
 let si=0,alive=[],mpUsed=0,dead=false,playing=false;
 
 const HAND=stages.length,genCache=new Map();
-function cur(){
-  if(si<HAND)return stages[si];
-  if(!genCache.has(si))genCache.set(si,genStage(si+1));
-  return genCache.get(si);
+function stageAt(i){
+  if(i<HAND)return stages[i];
+  if(!genCache.has(i))genCache.set(i,genStage(i+1));
+  return genCache.get(i);
 }
+function cur(){return stageAt(si);}
 
 // Highest unlocked stage index; clearing stage si unlocks si+1.
 let reached=HAND;
@@ -589,6 +615,76 @@ function uqBadge(r){
   if(r.unique)return '<span class="badge ok">軌道確定</span>';
   return '<span class="badge amb">解釈複数（'+(2*r.L)+'項で確定）</span>';
 }
+
+/* ===PANEL-MODE=== */
+// A panel is still just a chant t: the displayed recurrence is recovered from
+// t with the same Berlekamp–Massey the spellbook uses, so what the card says
+// is exactly how the spell will fly. Coefficients can be fractions (×5/2 の等比 etc.).
+function fmtRec(t){
+  const r=bm(t.map(function(v){return F(v);}));
+  let s="",any=false;
+  for(let j=1;j<=r.L;j++){
+    const c=j<r.Q.length?F(-r.Q[j].n,r.Q[j].d):f0;
+    if(c.n===0n)continue;
+    const neg=c.n<0n,an=neg?-c.n:c.n;
+    s+=any?(neg?" - ":" + "):(neg?"-":"");
+    if(c.d!==1n)s+="("+an+"/"+c.d+")";
+    else if(an!==1n)s+=an.toString();
+    s+="A<sub>i-"+j+"</sub>";
+    any=true;
+  }
+  if(!any)s="0";
+  return "A<sub>i</sub> = "+s+" (i ≥ "+Math.max(1,r.L)+")";
+}
+function fmtTerms(r){
+  const s=r.path.slice(0,4).map(function(v){return v.toString();}).join(", ");
+  if(r.path.length>4)return s+", …";
+  return s+(r.end==="dis"?" › 霧散":r.end==="out"?" › 場外":", …");
+}
+function mkPanel(t){
+  const r=traj(t);
+  return{t:t,r:r,key:r.path.join(",")+"|"+r.end,rec:fmtRec(t),terms:fmtTerms(r)};
+}
+
+// Panels for a stage: every reference solution plus seeded decoys, shuffled.
+// Decoys are real castable spells (verified via traj) built as near misses of
+// a sol chant, ally traps, or unrelated spells from the endless generator.
+// Seeded by the stage index, so the same stage always shows the same panels.
+const panelCache=new Map();
+function panelsFor(idx){
+  if(panelCache.has(idx))return panelCache.get(idx);
+  const st=stageAt(idx);
+  const rnd=mulberry32((((idx+1)*0x9E3779B9)^0x50414E4C)>>>0);
+  const all=st.sol.map(function(c){return mkPanel(c.t);});
+  const seen=new Set(all.map(function(p){return p.key;}));
+  const need=Math.max(3,6-all.length);
+  let made=0,guard=0;
+  function tryAdd(t){
+    const p=mkPanel(t);
+    if(seen.has(p.key)||p.r.cost>st.mp)return;
+    seen.add(p.key);all.push(p);made++;
+  }
+  while(made<need&&guard++<300){
+    const kind=ri(rnd,0,3);
+    if(kind===0){
+      const t0=pick(rnd,st.sol).t,off=BigInt(pick(rnd,[-3,-2,-1,1,2,3]));
+      const t=t0.map(function(v){return v+off;});
+      if(t.every(function(v){return v>0n&&v<=99n;}))tryAdd(t);
+    }else if(kind===1&&st.allies.length){
+      const A=pick(rnd,st.allies),d=ri(rnd,2,9),a=A-3*d;
+      if(a>=1)tryAdd([a,a+d,a+2*d].map(function(v){return BigInt(v);}));
+    }else{
+      const mk=pick(rnd,[mkArith,mkGeo,mkPair,mkSnipe]),sp=mk(rnd);
+      if(sp)tryAdd(sp.t);
+    }
+  }
+  for(let i=all.length-1;i>0;i--){
+    const j=Math.floor(rnd()*(i+1)),tmp=all[i];all[i]=all[j];all[j]=tmp;
+  }
+  panelCache.set(idx,all);
+  return all;
+}
+/* ===/PANEL-MODE=== */
 
 const sb=$("stagebtns");
 function refreshBar(){
@@ -624,13 +720,14 @@ function refreshBar(){
 function initStage(){
   const s=cur();
   alive=s.enemies.map(function(){return true;});
-  mpUsed=0;dead=false;
+  mpUsed=0;dead=false;selIdx=-1;
   $("log").innerHTML="";
   $("banner").style.display="none";
   $("chant").value="";
   $("preview").textContent="";
   $("anspanel").style.display="none";
   refreshBar();
+  refreshMode();
   render();
 }
 
@@ -661,8 +758,8 @@ function parse(){
   try{return toks.map(function(t){if(!/^-?\d+$/.test(t))throw 0;return BigInt(t);});}catch(e){return null;}
 }
 
-$("chant").addEventListener("input",function(){
-  const T=parse(),pv=$("preview");
+function showPreview(T){
+  const pv=$("preview");
   if(!T){pv.textContent="";return;}
   const s=cur(),r=traj(T);
   const shown=r.path.slice(0,18).map(function(v){return v.toString();}).join(" › ");
@@ -670,7 +767,47 @@ $("chant").addEventListener("input",function(){
   let warn="";
   s.allies.forEach(function(lv){if(r.path.some(function(v){return v===BigInt(lv);}))warn=" ／ 仲間に直撃コース！";});
   pv.innerHTML=uqBadge(r)+"消費MP "+r.cost+"（位数"+r.L+"）／ 軌道: "+esc(shown+tail)+'<span class="warn-t">'+esc(warn)+"</span>";
-});
+}
+$("chant").addEventListener("input",function(){showPreview(parse());});
+
+// Panel-selection mode vs classic text input. Sticky via localStorage.
+let mode="panel",selIdx=-1;
+try{if(localStorage.getItem("lfnb-mode")==="classic")mode="classic";}catch(e){}
+function renderPanels(){
+  const pg=$("panelgrid");
+  pg.innerHTML="";
+  if(mode!=="panel")return;
+  panelsFor(si).forEach(function(p,i){
+    const b=document.createElement("button");
+    b.className="spellcard"+(i===selIdx?" sel":"");
+    b.innerHTML='<span class="rec">'+p.rec+'</span><span class="terms">'+esc(p.terms)+'</span><span class="cost">消費MP '+p.r.cost+"</span>";
+    b.onclick=function(){
+      if(playing)return;
+      selIdx=selIdx===i?-1:i;
+      renderPanels();
+      showPreview(selIdx>=0?p.t:null);
+    };
+    pg.appendChild(b);
+  });
+}
+function refreshMode(){
+  $("modepanel").className=mode==="panel"?"on":"";
+  $("modeclassic").className=mode==="classic"?"on":"";
+  $("panelgrid").style.display=mode==="panel"?"grid":"none";
+  $("chant").style.display=mode==="panel"?"none":"";
+  renderPanels();
+}
+function setMode(m){
+  if(playing||mode===m)return;
+  mode=m;
+  try{localStorage.setItem("lfnb-mode",m);}catch(e){}
+  selIdx=-1;
+  $("chant").value="";
+  showPreview(null);
+  refreshMode();
+}
+$("modepanel").onclick=function(){setMode("panel");};
+$("modeclassic").onclick=function(){setMode("classic");};
 
 function doCast(T){
   if(dead)return;
@@ -701,6 +838,16 @@ function doCast(T){
 
 $("cast").onclick=function(){
   if(playing)return;
+  if(mode==="panel"){
+    const ps=panelsFor(si);
+    if(selIdx<0||selIdx>=ps.length){flash("パネルを選んでから「詠唱」を押してください");return;}
+    const t=ps[selIdx].t;
+    selIdx=-1;
+    showPreview(null);
+    renderPanels();
+    doCast(t);
+    return;
+  }
   const T=parse();
   if(!T){$("preview").textContent="整数をカンマ区切りで唱えてください";return;}
   doCast(T);
@@ -735,16 +882,28 @@ $("autoplay").onclick=function(){
   playing=true;
   const s=cur();
   alive=s.enemies.map(function(){return true;});
-  mpUsed=0;dead=false;
+  mpUsed=0;dead=false;selIdx=-1;
   $("log").innerHTML="";
   $("banner").style.display="none";
   render();
+  renderPanels();
   s.sol.forEach(function(c,i){
     setTimeout(function(){
-      $("chant").value=c.t.map(function(v){return v.toString();}).join(", ");
-      $("chant").dispatchEvent(new Event("input"));
+      if(mode==="panel"){
+        // Every sol chant is a panel by construction — highlight it.
+        selIdx=panelsFor(si).findIndex(function(p){
+          return p.t.length===c.t.length&&p.t.every(function(v,k){return v===c.t[k];});
+        });
+        renderPanels();
+        showPreview(c.t);
+      }else{
+        $("chant").value=c.t.map(function(v){return v.toString();}).join(", ");
+        $("chant").dispatchEvent(new Event("input"));
+      }
       setTimeout(function(){
         doCast(c.t);
+        selIdx=-1;
+        renderPanels();
         $("chant").value="";$("preview").textContent="";
         if(i===s.sol.length-1)playing=false;
       },800);
@@ -787,7 +946,7 @@ function addLog(T,r,kills,friendly){
 }
 
 initStage();
-window.__lnb={genStage:genStage,traj:traj};
+window.__lnb={genStage:genStage,traj:traj,panelsFor:panelsFor,fmtRec:fmtRec};
 })();
 </script>
 </body>
