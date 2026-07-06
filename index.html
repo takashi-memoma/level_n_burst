@@ -77,6 +77,9 @@ button:focus-visible{outline:2px solid var(--spell);outline-offset:2px}
 button.on{border-color:var(--spell);color:var(--spell)}
 button.primary{background:var(--spell-deep);border-color:var(--spell);color:var(--spell);font-weight:600}
 button.primary:hover{background:#233462}
+button:disabled{opacity:.35;cursor:default}
+button:disabled:hover{background:var(--panel)}
+.banner button{margin-left:.8rem}
 .panel{
   background:var(--panel);
   border:1px solid var(--border);
@@ -220,6 +223,7 @@ footer a:hover{text-decoration:underline}
     <li>次の項が<b>分数</b>になると魔法は霧散し、<b>レベル99を超える</b>と場外へ消えます。これを使って軌道をわざと自壊させるのが上級テクです。</li>
     <li>詠唱した項数が位数の2倍未満だと、ルールの解釈が複数残ります（<b>解釈複数</b>バッジ）。その場合も呪文書の解釈は毎回同じなので、プレビューの軌道を信じてOK。</li>
     <li>残りMP以内で敵を全滅させればクリア。見本MP以下なら魔道士級！</li>
+    <li>3面まではチュートリアル。<b>4面以降は自動生成で無限に続きます</b>（同じ面番号はいつでも同じ問題）。</li>
   </ul>
 </details>
 
@@ -305,6 +309,245 @@ function traj(T){
   return{cost:Math.max(1,r.L),L:r.L,path:path,end:end,unique:2*r.L<=T.length};
 }
 
+/* ===GEN-CORE=== */
+// Endless stages (4+) are generated on the fly. Solution spells are built first,
+// then enemies are harvested from their actual traj() paths, so every generated
+// stage is solvable by construction. Everything is seeded by the stage number,
+// so the same stage always contains the same puzzle.
+function mulberry32(seed){
+  return function(){
+    seed=(seed+0x6D2B79F5)|0;
+    let t=Math.imul(seed^seed>>>15,1|seed);
+    t=t+Math.imul(t^t>>>7,61|t)^t;
+    return((t^t>>>14)>>>0)/4294967296;
+  };
+}
+function ri(rnd,lo,hi){return lo+Math.floor(rnd()*(hi-lo+1));}
+function pick(rnd,arr){return arr[Math.floor(rnd()*arr.length)];}
+function igcd(a,b){while(b){const t=a%b;a=b;b=t;}return a;}
+function hitsOf(r){
+  const h=[];
+  r.path.forEach(function(v){if(v>0n&&v<=99n)h.push(Number(v));});
+  return h;
+}
+
+// Spell makers return {t, cost, hits, why, arch} or null. Parameters are drawn
+// at random but every candidate is verified against traj() — the same referee
+// the player faces — so no analytic assumption about BM's interpretation leaks in.
+function mkArith(rnd){
+  const d=ri(rnd,3,17),a=ri(rnd,2,Math.min(30,99-3*d));
+  const t=[a,a+d,a+2*d,a+3*d].map(function(x){return BigInt(x);});
+  const r=traj(t);
+  if(r.L!==2||r.end!=="out")return null;
+  return{t:t,cost:r.cost,hits:hitsOf(r),arch:"arith",
+    why:"「+"+d+"の等差」（位数2）。4つ唱えると 位数×2 ＝ 4項に達して軌道が一意に確定し、99を超えるまで自動で掃く。"};
+}
+function mkGeo(rnd){
+  const m=pick(rnd,[2,2,3]),a=ri(rnd,2,Math.floor(99/(m*m)));
+  const t=[a,a*m].map(function(x){return BigInt(x);});
+  const r=traj(t);
+  if(r.L!==1||r.end!=="out"||r.path.length<3||r.path.length>6)return null;
+  return{t:t,cost:r.cost,hits:hitsOf(r),arch:"geo",
+    why:"「×"+m+"の等比」は位数1で1MP。倍々で撃ち抜き、99を超えて場外へ消える。間のレベルは飛び越える。"};
+}
+function mkPair(rnd){
+  // a=q*t, b=p*t with gcd(p,q)=gcd(t,q)=1 guarantees the next term p^2*t/q is
+  // fractional, so the spell kills exactly {a,b} and dissipates. Still verified.
+  const q=pick(rnd,[2,3,4,5]);
+  const ps=[];
+  for(let p=2;p<=3*q;p++)if(p!==q&&igcd(p,q)===1)ps.push(p);
+  const p=pick(rnd,ps),mx=Math.max(p,q);
+  const ks=[];
+  for(let k=1;k*mx<=99;k++)if(igcd(k,q)===1)ks.push(k);
+  if(!ks.length)return null;
+  const k=pick(rnd,ks),A=q*k,B=p*k;
+  const t=[BigInt(A),BigInt(B)];
+  const r=traj(t);
+  if(r.L!==1||r.end!=="dis"||r.path.length!==2)return null;
+  return{t:t,cost:r.cost,hits:hitsOf(r),arch:"pair",
+    why:A+"と"+B+"の2つだけなら「×"+p+"/"+q+"の等比」で1MP。次項は分数なので即霧散し、2体だけを安全に始末できる。"};
+}
+function mkSnipe(rnd,avoid){
+  for(let i=0;i<20;i++){
+    const a=ri(rnd,10,99);
+    if(avoid&&avoid.has(a))continue;
+    const t=[BigInt(a)];
+    const r=traj(t);
+    if(r.L!==1||r.end!=="out"||r.path.length!==1)continue;
+    return{t:t,cost:r.cost,hits:hitsOf(r),arch:"snipe",
+      why:a+"を1つだけ唱えると呪文書は「×"+a+"の等比」と解釈する。次項"+(a*a)+"は場外なので単体スナイプになる。"};
+  }
+  return null;
+}
+function mkBend(rnd){
+  const d=ri(rnd,3,15),a=ri(rnd,2,Math.min(20,95-3*d));
+  const es=[2,-2,3,-3,1,-1,4,-4];
+  for(let i=0;i<es.length;i++){
+    const x=a+3*d+es[i];
+    if(x<1||x>99||x===a+2*d)continue;
+    const t=[a,a+d,a+2*d,x].map(function(v){return BigInt(v);});
+    const r=traj(t);
+    if(r.L!==2||r.end!=="dis"||r.path.length!==4)continue;
+    return{t:t,cost:r.cost,hits:hitsOf(r),arch:"bend",lat:{a:a,d:d},
+      why:"最初は+"+d+"の等差に見せて、4項目の"+x+"で軌道をねじ曲げる。位数2のまま次項が分数になって霧散し、延長線上には何も届かない。"};
+  }
+  return null;
+}
+
+const FLAVORS={
+  arith:["整列スライムの行進","ゴブリン等間隔部隊","石像の回廊","骨の兵団、直進"],
+  geo:["倍々コウモリの群れ","分裂スライム","ねずみ算の巣窟","増殖キノコの森"],
+  pair:["はぐれ悪魔の二人組","双子の人食い花","相棒ゴーレム","つがいのワイバーン"],
+  snipe:["孤高の暗殺蜂","見張りのガーゴイル","一匹狼のリカント","はぐれキマイラ"],
+  bend:["幻影の等差竜","ミミックの隊列","蜃気楼の軍勢","ドッペルの偽装行軍"]
+};
+const HINTBITS={
+  arith:"等差の軌道は99を超えるまで勝手に飛ぶ",
+  geo:"掛け算の軌道は間のレベルを飛び越える",
+  pair:"比が割り切れない2つ組は、唱えた直後に霧散する",
+  snipe:"10以上の数を1つだけ唱えれば単体スナイプ",
+  bend:"素直な等差は延長線が危険。最後の項で軌道をねじ曲げろ"
+};
+
+// Difficulty curve by stage number.
+function curveFor(n,rnd){
+  if(n<=5)return{spells:2,pool:["arith","arith","geo","geo","snipe"],allies:0,slack:2};
+  if(n<=9)return{spells:2,pool:["arith","arith","geo","pair","pair","snipe"],allies:1,slack:2};
+  if(n<=14)return{spells:3,pool:["arith","geo","pair","pair","bend","snipe"],allies:1,slack:1};
+  if(n<=24)return{spells:3,pool:["arith","geo","pair","pair","bend","bend","snipe"],allies:ri(rnd,1,2),slack:1};
+  return{spells:n%4===0?4:3,pool:["arith","geo","pair","pair","bend","bend","snipe"],allies:ri(rnd,1,2),slack:1};
+}
+
+// Replays a stage's own sol through traj() and checks it actually wins:
+// every enemy dies, no ally is hit, and the total cost matches par.
+function simulate(st){
+  const killed={};
+  let cost=0,ff=false;
+  st.sol.forEach(function(c){
+    const r=traj(c.t);
+    cost+=r.cost;
+    r.path.forEach(function(v){
+      if(v>0n&&v<=99n){
+        const num=Number(v);
+        if(st.enemies.indexOf(num)>=0)killed[num]=true;
+        if(st.allies.indexOf(num)>=0)ff=true;
+      }
+    });
+  });
+  return !ff&&cost===st.par&&cost<=st.mp&&
+    st.enemies.every(function(lv){return killed[lv];});
+}
+
+function tryGen(n,rnd){
+  const cv=curveFor(n,rnd);
+  // Draw archetypes; at most one arith and one bend per stage, snipes last so
+  // they can pick targets outside the other spells' hit sets.
+  const pool=cv.pool.slice(),archs=[];
+  for(let i=0;i<cv.spells;i++){
+    const ar=pool.length?pick(rnd,pool):"snipe";
+    archs.push(ar);
+    if(ar==="arith"||ar==="bend")
+      for(let j=pool.length-1;j>=0;j--)if(pool[j]===ar)pool.splice(j,1);
+  }
+  archs.sort(function(x,y){return(x==="snipe")-(y==="snipe");});
+  const spells=[],used=new Set();
+  for(let i=0;i<archs.length;i++){
+    let sp=null;
+    if(archs[i]==="arith")sp=mkArith(rnd);
+    else if(archs[i]==="geo")sp=mkGeo(rnd);
+    else if(archs[i]==="pair")sp=mkPair(rnd);
+    else if(archs[i]==="bend")sp=mkBend(rnd);
+    else sp=mkSnipe(rnd,used);
+    if(!sp)return null;
+    sp.hits.forEach(function(v){used.add(v);});
+    spells.push(sp);
+  }
+  // Each spell must own at least one target no other spell covers.
+  for(let i=0;i<spells.length;i++){
+    const others=new Set();
+    spells.forEach(function(sp,j){if(j!==i)sp.hits.forEach(function(v){others.add(v);});});
+    if(!spells[i].hits.some(function(v){return !others.has(v);}))return null;
+  }
+  // Enemies: arithmetic sweeps contribute their first three lattice points plus
+  // one or two later ones (the sweep still clears the rest); other spells
+  // contribute every hit.
+  const eset=new Set();
+  spells.forEach(function(sp){
+    if(sp.arch==="arith"){
+      sp.hits.slice(0,3).forEach(function(v){eset.add(v);});
+      const extra=ri(rnd,1,2);
+      for(let i=0;i<extra;i++)eset.add(sp.hits[ri(rnd,3,sp.hits.length-1)]);
+    }else{
+      sp.hits.forEach(function(v){eset.add(v);});
+    }
+  });
+  const enemies=Array.from(eset).sort(function(x,y){return x-y;});
+  if(enemies.length<5||enemies.length>12)return null;
+  // Allies as traps: prefer the extension of a bend's fake lattice (stage 3's
+  // 55) or of an arithmetic run in the enemy list (stage 2's 25); otherwise a
+  // random level off every solution path. Never on a sol trajectory.
+  const allies=[];
+  if(cv.allies>0){
+    const cands=[];
+    spells.forEach(function(sp){
+      if(sp.arch==="bend"){cands.push(sp.lat.a+3*sp.lat.d);cands.push(sp.lat.a+4*sp.lat.d);}
+    });
+    for(let i=0;i+2<enemies.length;i++){
+      const d1=enemies[i+1]-enemies[i];
+      if(d1>0&&enemies[i+2]-enemies[i+1]===d1)cands.push(enemies[i+2]+d1);
+    }
+    cands.forEach(function(v){
+      if(allies.length<cv.allies&&v>=1&&v<=99&&!used.has(v)&&
+         enemies.indexOf(v)<0&&allies.indexOf(v)<0)allies.push(v);
+    });
+    for(let tr=0;tr<30&&allies.length<cv.allies;tr++){
+      const v=ri(rnd,2,99);
+      if(!used.has(v)&&enemies.indexOf(v)<0&&allies.indexOf(v)<0)allies.push(v);
+    }
+    if(!allies.length)return null;
+  }
+  let par=0;
+  spells.forEach(function(sp){par+=sp.cost;});
+  const main=spells.reduce(function(a,b){return b.cost>a.cost?b:a;},spells[0]);
+  const seen={},bits=[];
+  spells.forEach(function(sp){
+    if(!seen[sp.arch]){seen[sp.arch]=true;bits.push(HINTBITS[sp.arch]);}
+  });
+  const st={
+    name:"ステージ"+n+" "+pick(rnd,FLAVORS[main.arch]),
+    enemies:enemies,allies:allies,mp:par+cv.slack,par:par,
+    hint:"ヒント: "+bits.join("。")+"。"+(allies.length?"延長線上の仲間に注意。":""),
+    sol:spells.map(function(sp){return{t:sp.t,why:sp.why};})
+  };
+  return simulate(st)?st:null;
+}
+
+// Always-solvable safety net: k lone targets >= 10, each dies to its own
+// one-term snipe (the next term a*a is already out of bounds).
+function fallbackStage(n){
+  const rnd=mulberry32((n*0x9E3779B9)>>>0);
+  const k=2+n%3,eset=new Set();
+  while(eset.size<k)eset.add(ri(rnd,10,99));
+  const enemies=Array.from(eset).sort(function(x,y){return x-y;});
+  return{
+    name:"ステージ"+n+" はぐれ魔物の掃討",
+    enemies:enemies,allies:[],mp:k+1,par:k,
+    hint:"ヒント: 10以上の数を1つだけ唱えた魔法は「×その数」の等比。すぐ場外に消えるので単体スナイプになる。",
+    sol:enemies.map(function(a){
+      return{t:[BigInt(a)],why:a+"を1つだけ唱えて単体スナイプ。次項"+(a*a)+"は場外。"};
+    })
+  };
+}
+
+function genStage(n){
+  for(let at=0;at<40;at++){
+    const st=tryGen(n,mulberry32((n*0x9E3779B9^at*0x85EBCA6B)>>>0));
+    if(st)return st;
+  }
+  return fallbackStage(n);
+}
+/* ===/GEN-CORE=== */
+
 const stages=[
  {name:"ステージ1 スライム講習会",enemies:[3,6,9,12,15],allies:[],mp:3,par:2,
   hint:"ヒント: 等差数列は3つ唱えれば軌道が伝わる。あとは勝手に飛んでいく。",
@@ -321,6 +564,25 @@ const stages=[
 ];
 let si=0,alive=[],mpUsed=0,dead=false,playing=false;
 
+const HAND=stages.length,genCache=new Map();
+function cur(){
+  if(si<HAND)return stages[si];
+  if(!genCache.has(si))genCache.set(si,genStage(si+1));
+  return genCache.get(si);
+}
+
+// Highest unlocked stage index; clearing stage si unlocks si+1.
+let reached=HAND;
+try{
+  const v=parseInt(localStorage.getItem("lfnb-reached"),10);
+  if(v>reached)reached=v;
+}catch(e){}
+function saveReached(i){
+  if(i<=reached)return;
+  reached=i;
+  try{localStorage.setItem("lfnb-reached",String(reached));}catch(e){}
+}
+
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
 function uqBadge(r){
@@ -329,15 +591,38 @@ function uqBadge(r){
 }
 
 const sb=$("stagebtns");
-stages.forEach(function(s,i){
-  const b=document.createElement("button");
-  b.textContent=(i+1)+" 面";
-  b.onclick=function(){if(playing)return;si=i;initStage();};
-  sb.appendChild(b);
-});
+function refreshBar(){
+  sb.innerHTML="";
+  stages.forEach(function(s,i){
+    const b=document.createElement("button");
+    b.textContent=(i+1)+" 面";
+    if(i===si)b.className="on";
+    b.onclick=function(){if(playing)return;si=i;initStage();};
+    sb.appendChild(b);
+  });
+  const inf=document.createElement("button");
+  inf.textContent=si>=HAND?"∞ "+(si+1)+" 面":"∞ "+(HAND+1)+" 面〜";
+  if(si>=HAND)inf.className="on";
+  inf.onclick=function(){if(playing||si>=HAND)return;si=reached;initStage();};
+  sb.appendChild(inf);
+  if(si>=HAND){
+    const prev=document.createElement("button");
+    prev.textContent="◀";
+    prev.disabled=si<=HAND;
+    prev.setAttribute("aria-label","前の面へ");
+    prev.onclick=function(){if(playing)return;si--;initStage();};
+    sb.appendChild(prev);
+    const next=document.createElement("button");
+    next.textContent="▶";
+    next.disabled=si>=reached;
+    next.setAttribute("aria-label","次の面へ");
+    next.onclick=function(){if(playing)return;si++;initStage();};
+    sb.appendChild(next);
+  }
+}
 
 function initStage(){
-  const s=stages[si];
+  const s=cur();
   alive=s.enemies.map(function(){return true;});
   mpUsed=0;dead=false;
   $("log").innerHTML="";
@@ -345,14 +630,12 @@ function initStage(){
   $("chant").value="";
   $("preview").textContent="";
   $("anspanel").style.display="none";
-  Array.prototype.forEach.call(sb.children,function(b,i){
-    b.className=i===si?"on":"";
-  });
+  refreshBar();
   render();
 }
 
 function render(){
-  const s=stages[si];
+  const s=cur();
   $("stname").textContent=s.name;
   $("hint").textContent=s.hint;
   const left=s.mp-mpUsed;
@@ -381,7 +664,7 @@ function parse(){
 $("chant").addEventListener("input",function(){
   const T=parse(),pv=$("preview");
   if(!T){pv.textContent="";return;}
-  const s=stages[si],r=traj(T);
+  const s=cur(),r=traj(T);
   const shown=r.path.slice(0,18).map(function(v){return v.toString();}).join(" › ");
   const tail=r.end==="dis"?" › 霧散":r.end==="out"?" › 場外":r.path.length>18?" › …":"";
   let warn="";
@@ -391,7 +674,7 @@ $("chant").addEventListener("input",function(){
 
 function doCast(T){
   if(dead)return;
-  const s=stages[si],r=traj(T),left=s.mp-mpUsed;
+  const s=cur(),r=traj(T),left=s.mp-mpUsed;
   if(r.cost>left){flash("MPが足りない！（必要"+r.cost+" / 残り"+left+"）");return;}
   mpUsed+=r.cost;
   const hitset={};
@@ -406,7 +689,9 @@ function doCast(T){
   const allDead=s.enemies.every(function(_,i){return !alive[i];});
   if(allDead&&mpUsed<=s.mp){
     const rank=mpUsed<=s.par?"魔道士級！最適解です":mpUsed<=s.par+1?"見事！":"クリア！";
-    banner("✦ "+rank+" 消費 "+mpUsed+" MP（見本 "+s.par+" MP）","ok");
+    saveReached(si+1);
+    banner("✦ "+rank+" 消費 "+mpUsed+" MP（見本 "+s.par+" MP）","ok",true);
+    refreshBar();
   }else if(mpUsed>=s.mp&&!allDead){
     dead=true;
     banner("MP切れ…敵が残っています。「やり直す」で再挑戦！","bad");
@@ -427,7 +712,7 @@ $("reset").onclick=function(){if(playing)return;initStage();};
 $("ansbtn").onclick=function(){
   const p=$("anspanel");
   if(p.style.display==="block"){p.style.display="none";return;}
-  const s=stages[si],list=$("anslist");
+  const s=cur(),list=$("anslist");
   list.innerHTML="";
   let total=0;
   s.sol.forEach(function(c){
@@ -448,7 +733,7 @@ $("ansbtn").onclick=function(){
 $("autoplay").onclick=function(){
   if(playing)return;
   playing=true;
-  const s=stages[si];
+  const s=cur();
   alive=s.enemies.map(function(){return true;});
   mpUsed=0;dead=false;
   $("log").innerHTML="";
@@ -467,16 +752,22 @@ $("autoplay").onclick=function(){
   });
 };
 
-function banner(msg,kind){
+function banner(msg,kind,next){
   const b=$("banner");
   b.style.display="block";
   b.textContent=msg;
   b.className="banner "+kind;
+  if(next){
+    const nb=document.createElement("button");
+    nb.textContent="次の面へ ▶";
+    nb.onclick=function(){if(playing)return;si++;initStage();};
+    b.appendChild(nb);
+  }
 }
 function flash(msg){$("preview").innerHTML='<span class="warn-t">'+esc(msg)+"</span>";}
 
 function addLog(T,r,kills,friendly){
-  const s=stages[si],typedN=T.length;
+  const s=cur(),typedN=T.length;
   const e=document.createElement("div");
   e.className="logent";
   let chips="";
@@ -496,6 +787,7 @@ function addLog(T,r,kills,friendly){
 }
 
 initStage();
+window.__lnb={genStage:genStage,traj:traj};
 })();
 </script>
 </body>
