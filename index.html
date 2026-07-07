@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>レベル f(n) バースト — 漸化式パズル</title>
-<meta name="description" content="数列を唱えると Berlekamp–Massey が最小の漸化式を見破り、その軌道で敵を撃ち抜くパズルゲーム。">
+<title>レベル f(n) バースト — すごろく影分身パズル</title>
+<meta name="description" content="漸化式で踏むマスが決まる影分身を放ち、すごろく盤の敵を全て討つパズル。仲間は踏むな、回復薬でMPを繋げ。">
 <style>
 :root{
   --bg:#0d0f1e;
@@ -21,6 +21,8 @@
   --enemy-deep:#3a1e22;
   --ally:#63d1a2;
   --ally-deep:#15342b;
+  --heal:#8ad6ff;
+  --heal-deep:#12324a;
   --warn:#f2c05c;
   --warn-deep:#3a2f14;
   --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
@@ -35,25 +37,14 @@ body{
   line-height:1.7;
   min-height:100vh;
 }
-.wrap{max-width:760px;margin:0 auto;padding:2.5rem 1.25rem 4rem}
+.wrap{max-width:860px;margin:0 auto;padding:2.5rem 1.25rem 4rem}
 header{margin-bottom:1.75rem}
-h1{
-  font-family:var(--serif);
-  font-weight:600;
-  font-size:2rem;
-  letter-spacing:.06em;
-  line-height:1.3;
-}
+h1{font-family:var(--serif);font-weight:600;font-size:2rem;letter-spacing:.06em;line-height:1.3;}
 h1 .fn{color:var(--spell);font-style:italic}
 .tagline{color:var(--ink-2);font-size:.9rem;margin-top:.35rem}
 details.rules{
-  background:var(--panel);
-  border:1px solid var(--border);
-  border-radius:12px;
-  padding:.8rem 1.1rem;
-  margin-bottom:1.25rem;
-  font-size:.86rem;
-  color:var(--ink-2);
+  background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  padding:.8rem 1.1rem;margin-bottom:1.25rem;font-size:.86rem;color:var(--ink-2);
 }
 details.rules summary{cursor:pointer;color:var(--ink);font-weight:600;font-size:.9rem}
 details.rules ul{margin:.6rem 0 .2rem 1.2rem}
@@ -61,15 +52,9 @@ details.rules li{margin:.25rem 0}
 details.rules b{color:var(--ink);font-weight:600}
 .stagebar{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem}
 button{
-  font:inherit;
-  font-size:.88rem;
-  color:var(--ink);
-  background:var(--panel);
-  border:1px solid var(--border-strong);
-  border-radius:8px;
-  padding:.4rem 1rem;
-  cursor:pointer;
-  transition:background .12s,border-color .12s,transform .05s;
+  font:inherit;font-size:.88rem;color:var(--ink);background:var(--panel);
+  border:1px solid var(--border-strong);border-radius:8px;padding:.4rem 1rem;
+  cursor:pointer;transition:background .12s,border-color .12s,transform .05s;
 }
 button:hover{background:var(--panel-2)}
 button:active{transform:scale(.98)}
@@ -79,163 +64,86 @@ button.primary{background:var(--spell-deep);border-color:var(--spell);color:var(
 button.primary:hover{background:#233462}
 button:disabled{opacity:.35;cursor:default}
 button:disabled:hover{background:var(--panel)}
-.banner button{margin-left:.8rem}
-.panel{
-  background:var(--panel);
-  border:1px solid var(--border);
-  border-radius:12px;
-  padding:1.1rem 1.3rem;
-  margin-bottom:1rem;
-}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:1rem;}
 .panel-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem}
 .stname{font-weight:600;font-size:1.02rem}
 .mp{font-family:var(--mono);font-size:.95rem;color:var(--ink-2)}
 .mp b{color:var(--ink);font-weight:600}
 .mp b.low{color:var(--enemy)}
 .hint{font-size:.8rem;color:var(--ink-3);margin:.3rem 0 .8rem}
-.board{display:flex;flex-wrap:wrap;gap:.5rem}
-.chip{
-  font-family:var(--mono);
-  font-size:.88rem;
-  padding:.32rem .8rem;
-  border-radius:8px;
-  transition:opacity .4s;
+/* ---- sugoroku track ---- */
+.track{display:flex;gap:5px;overflow-x:auto;padding:.4rem .1rem .9rem}
+.cell{
+  flex:0 0 auto;width:40px;min-height:60px;border:1px solid var(--border);border-radius:9px;
+  background:var(--panel-2);display:flex;flex-direction:column;align-items:center;
+  justify-content:flex-start;padding:.28rem 0 .2rem;gap:.05rem;position:relative;
+  transition:background .3s,opacity .3s;
 }
-.chip.enemy{background:var(--enemy-deep);color:var(--enemy)}
-.chip.ally{background:var(--ally-deep);color:var(--ally)}
-.chip.dead{opacity:.28;text-decoration:line-through}
-.chantrow{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.35rem}
-input[type=text]{
-  flex:1;
-  min-width:180px;
-  font-family:var(--mono);
-  font-size:.95rem;
-  color:var(--ink);
-  background:var(--panel);
-  border:1px solid var(--border-strong);
-  border-radius:8px;
-  padding:.45rem .8rem;
-}
-input[type=text]:focus{outline:2px solid var(--spell);outline-offset:1px;border-color:var(--spell)}
-input[type=text]::placeholder{color:var(--ink-3)}
-.preview{
-  font-family:var(--mono);
-  font-size:.78rem;
-  color:var(--ink-3);
-  min-height:1.6rem;
-  margin-bottom:.9rem;
-  word-break:break-all;
-}
-.preview .warn-t{color:var(--warn)}
-.modebar{display:flex;gap:.5rem;margin-bottom:1rem}
+.cell .num{font-family:var(--mono);font-size:.58rem;color:var(--ink-3)}
+.cell .ic{font-size:1.05rem;line-height:1.15}
+.cell .sub{font-family:var(--mono);font-size:.56rem;color:var(--heal)}
+.cell.hero{border-color:var(--spell);background:var(--spell-deep)}
+.cell.enemy .ic{color:var(--enemy)}
+.cell.enemy.dead{opacity:.3}
+.cell.enemy.dead .ic{text-decoration:line-through}
+.cell.ally{border-color:var(--ally);background:var(--ally-deep)}
+.cell.ally .ic{color:var(--ally)}
+.cell.potion{border-color:var(--heal)}
+.cell.potion.used{opacity:.32}
+.cell.potion .ic{color:var(--heal)}
+.cell.step{outline:2px solid var(--spell);outline-offset:1px}
+.cell.step.step-hit{background:var(--enemy-deep)}
+.cell.step.step-danger{background:var(--warn-deep);outline-color:var(--warn)}
+.cell.step.step-heal{background:var(--heal-deep)}
+.tracklabel{font-size:.72rem;color:var(--ink-3);margin-bottom:.2rem}
+/* ---- panels ---- */
 .panelgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.6rem;margin-bottom:.9rem}
-.spellcard{
-  display:flex;
-  flex-direction:column;
-  gap:.2rem;
-  text-align:left;
-  padding:.6rem .85rem;
-  border-radius:10px;
-}
+.spellcard{display:flex;flex-direction:column;gap:.2rem;text-align:left;padding:.6rem .85rem;border-radius:10px;}
 .spellcard .rec{font-family:var(--mono);font-size:.86rem;color:var(--ink);word-break:break-all}
 .spellcard .rec sub{font-size:.68em}
-.spellcard .terms{font-family:var(--mono);font-size:.76rem;color:var(--ink-2);word-break:break-all}
+.spellcard .terms{font-family:var(--mono);font-size:.74rem;color:var(--ink-2);word-break:break-all}
 .spellcard .cost{font-size:.7rem;color:var(--ink-3)}
 .spellcard.sel{border-color:var(--spell);background:var(--spell-deep)}
 .spellcard.sel:hover{background:var(--spell-deep)}
 .spellcard.sel .rec{color:var(--spell)}
+.chantrow{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.35rem}
+.preview{font-family:var(--mono);font-size:.78rem;color:var(--ink-3);min-height:1.6rem;margin-bottom:.9rem;word-break:break-all;}
+.preview .warn-t{color:var(--warn)}
+.preview .heal-t{color:var(--heal)}
+.badge{display:inline-block;font-size:.7rem;padding:.05rem .55rem;border-radius:6px;vertical-align:1px;margin-right:.3rem;}
+.badge.ok{background:var(--ally-deep);color:var(--ally)}
+.badge.amb{background:var(--warn-deep);color:var(--warn)}
+/* ---- maker ---- */
 details.maker .makernote{margin:.5rem 0 .2rem;font-size:.82rem}
 .makerrow{display:flex;flex-wrap:wrap;align-items:flex-end;gap:.7rem;margin:.6rem 0 .2rem}
 .makerrow label{display:flex;flex-direction:column;gap:.25rem;font-size:.78rem;color:var(--ink-2)}
-.makerrow input[type=number]{
-  width:9rem;
-  font-family:var(--mono);
-  font-size:.95rem;
-  color:var(--ink);
-  background:var(--panel);
-  border:1px solid var(--border-strong);
-  border-radius:8px;
-  padding:.4rem .7rem;
-}
+.makerrow input[type=number]{width:8rem;font-family:var(--mono);font-size:.95rem;color:var(--ink);background:var(--panel);border:1px solid var(--border-strong);border-radius:8px;padding:.4rem .7rem;}
 .makerrow input[type=number]:focus{outline:2px solid var(--spell);outline-offset:1px;border-color:var(--spell)}
 .makerinfo{font-size:.82rem;color:var(--ally);min-height:1.2rem;margin-top:.3rem}
-.badge{
-  display:inline-block;
-  font-family:inherit;
-  font-size:.7rem;
-  padding:.05rem .55rem;
-  border-radius:6px;
-  vertical-align:1px;
-  margin-right:.3rem;
-}
-.badge.ok{background:var(--ally-deep);color:var(--ally)}
-.badge.amb{background:var(--warn-deep);color:var(--warn)}
-.anspanel{
-  background:var(--panel-2);
-  border:1px solid var(--border);
-  border-radius:12px;
-  padding:1rem 1.3rem;
-  margin-bottom:1rem;
-  display:none;
-}
+/* ---- answer / banner / log ---- */
+.anspanel{background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:1rem 1.3rem;margin-bottom:1rem;display:none;}
 .anspanel .head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:.4rem}
 .anspanel .head span{font-weight:600;font-size:.92rem}
 .ansrow{padding:.55rem 0;font-size:.85rem;color:var(--ink-2)}
 .ansrow + .ansrow{border-top:1px solid var(--border)}
-.ansrow .sp{
-  font-family:var(--mono);
-  font-weight:600;
-  font-size:.88rem;
-  background:var(--spell-deep);
-  color:var(--spell);
-  padding:.1rem .7rem;
-  border-radius:6px;
-  margin-right:.5rem;
-}
+.ansrow .sp{font-family:var(--mono);font-weight:600;font-size:.86rem;background:var(--spell-deep);color:var(--spell);padding:.1rem .7rem;border-radius:6px;margin-right:.5rem}
 .ansrow .cost{font-size:.75rem;color:var(--ink-3);margin-right:.4rem}
 .anstotal{padding-top:.55rem;border-top:1px solid var(--border);font-weight:600;font-size:.85rem}
-.banner{
-  display:none;
-  border-radius:12px;
-  padding:.8rem 1.3rem;
-  margin-bottom:1rem;
-  font-size:.95rem;
-  font-weight:600;
-}
+.banner{display:none;border-radius:12px;padding:.8rem 1.3rem;margin-bottom:1rem;font-size:.95rem;font-weight:600;}
 .banner.ok{background:var(--ally-deep);color:var(--ally)}
 .banner.bad{background:var(--enemy-deep);color:var(--enemy)}
+.banner button{margin-left:.8rem}
 .logent{border-top:1px solid var(--border);padding:.7rem 0;font-size:.85rem}
 .logent .lhead{margin-bottom:.25rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .logent .lhead .nm{font-weight:600}
 .logent .lhead .meta{color:var(--ink-2)}
-.logent .lhead .ff{color:var(--warn)}
-.t{
-  display:inline-block;
-  font-family:var(--mono);
-  font-size:.78rem;
-  padding:.05rem .5rem;
-  margin:.12rem .18rem .12rem 0;
-  border-radius:5px;
-  background:var(--panel);
-  color:var(--ink-3);
-  animation:pop .25s both;
-}
+.logent .lhead .ff{color:var(--enemy)}
+.logent .lhead .hl{color:var(--heal)}
+.t{display:inline-block;font-family:var(--mono);font-size:.78rem;padding:.05rem .5rem;margin:.12rem .18rem .12rem 0;border-radius:5px;background:var(--panel);color:var(--ink-3);}
 .t.hit{background:var(--enemy-deep);color:var(--enemy);font-weight:600}
 .t.fr{background:var(--warn-deep);color:var(--warn);font-weight:600}
-.t.ext{border:1px dashed var(--border-strong)}
-.tail{font-size:.75rem;color:var(--ink-3)}
-@keyframes pop{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){
-  .t{animation:none}
-  .chip{transition:none}
-}
-footer{
-  margin-top:2.5rem;
-  padding-top:1rem;
-  border-top:1px solid var(--border);
-  font-size:.78rem;
-  color:var(--ink-3);
-}
+.t.hl{background:var(--heal-deep);color:var(--heal);font-weight:600}
+footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--border);font-size:.78rem;color:var(--ink-3);}
 footer a{color:var(--spell);text-decoration:none}
 footer a:hover{text-decoration:underline}
 </style>
@@ -244,39 +152,31 @@ footer a:hover{text-decoration:underline}
 <div class="wrap">
 <header>
   <h1>レベル <span class="fn">f(n)</span> バースト</h1>
-  <p class="tagline">数列を唱えよ。呪文書が漸化式を見破り、その軌道が敵を貫く。</p>
+  <p class="tagline">影分身を放て。漸化式が刻むマスが敵を討つ。仲間は踏むな、回復薬でMPを繋げ。</p>
 </header>
 
 <details class="rules">
   <summary>ルール（はじめての人はここを開く）</summary>
   <ul>
-    <li>数字をカンマ区切りで唱えると、呪文書（Berlekamp–Massey）がその数列の<b>最小の漸化式</b>を見破ります。漸化式の長さ（位数）＝<b>消費MP</b>です。</li>
-    <li>入力方法は2つ。<b>パネル選択モード</b>は漸化式パネル（第1〜4項のヒント付き）を選んで「詠唱」、<b>クラシックモード</b>は数字を直接入力。上のボタンでいつでも切替できます。パネル選択モードは<b>位数3以上</b>の高位数パズル専用で、「問題をつくる」から最低位数を指定して難易度を試せます。</li>
-    <li>魔法の軌道上のレベルを持つ敵は全滅。ただし魔法は<b>詠唱を止めたあとも漸化式のまま飛び続けます</b>。延長線上に仲間（♥）がいたら直撃、回復に2MP。</li>
-    <li>次の項が<b>分数</b>になると魔法は霧散し、<b>レベル上限（クラシックは99、高位数モードは9999）を超える</b>と場外へ消えます。これを使って軌道をわざと自壊させるのが上級テクです。</li>
-    <li>詠唱した項数が位数の2倍未満だと、ルールの解釈が複数残ります（<b>解釈複数</b>バッジ）。その場合も呪文書の解釈は毎回同じなので、プレビューの軌道を信じてOK。</li>
-    <li>残りMP以内で敵を全滅させればクリア。見本MP以下なら魔道士級！</li>
-    <li>3面まではチュートリアル。<b>4面以降は自動生成で無限に続きます</b>（同じ面番号はいつでも同じ問題）。</li>
+    <li>主人公は<b>0マス目</b>に立っています。MPを消費して<b>影分身</b>を放つと、影分身は<b>漸化式で決まるマス</b>を次々と踏んでいきます（＝盤上をジャンプする軌道）。</li>
+    <li>影分身が踏むマスの<b>敵</b>（☠）は倒れます。<b>すべての敵を倒せばクリア</b>。影分身は複数回放てるので、<b>どれを・どの順で</b>放つかがカギ。</li>
+    <li>影分身の消費MPは、その漸化式の長さ（<b>位数</b>）です。MPが位数に満たないと放てません。</li>
+    <li>マスには<b>回復薬</b>（🧪）があり、影分身が踏むと<b>MPが回復</b>します（薬ごとに回復量が違う・一度きり）。これで連鎖を繋ぎます。</li>
+    <li><b>仲間</b>（♥）を1人でも踏んだら<b>即ゲームオーバー</b>。仲間を貫く影分身は選ばないこと。</li>
+    <li>影分身は<b>6体</b>から選べます。次項が分数になったり盤の外へ出ると、その影分身はそこで消えます。</li>
+    <li>「問題をつくる」で最低位数・盤面サイズを指定して難易度を試せます。3面まで進むと自動生成で続きます。</li>
   </ul>
 </details>
 
 <div class="stagebar" id="stagebtns"></div>
 
-<div class="modebar">
-  <button id="modepanel">パネル選択</button>
-  <button id="modeclassic">クラシック（数字入力）</button>
-</div>
-
 <details class="rules maker" id="makerbox">
-  <summary>問題をつくる（最低位数を指定して難易度を試す）</summary>
-  <p class="makernote">最低位数を上げるほど、パネルに並ぶ漸化式が複雑になり読み解きが難しくなります。生成された問題はパネル選択モードで即プレイできます。</p>
+  <summary>問題をつくる（最低位数・盤面サイズを指定）</summary>
+  <p class="makernote">最低位数を上げると影分身の漸化式が複雑に、盤面を広げると軌道が長くなります。生成した問題はすぐプレイできます。</p>
   <div class="makerrow">
-    <label>最低位数
-      <input type="number" id="minord" min="1" max="6" value="3" inputmode="numeric">
-    </label>
-    <label>シード（任意）
-      <input type="number" id="mseed" placeholder="空欄=毎回ランダム" inputmode="numeric">
-    </label>
+    <label>最低位数<input type="number" id="minord" min="2" max="6" value="2" inputmode="numeric"></label>
+    <label>盤面マス数<input type="number" id="blen" min="24" max="1000" value="48" inputmode="numeric"></label>
+    <label>シード（任意）<input type="number" id="mseed" placeholder="空欄=ランダム" inputmode="numeric"></label>
     <button class="primary" id="mgen">この設定で生成</button>
   </div>
   <div class="makerinfo" id="makerinfo"></div>
@@ -288,23 +188,23 @@ footer a:hover{text-decoration:underline}
     <span class="mp" id="mpnow"></span>
   </div>
   <div class="hint" id="hint"></div>
-  <div class="board" id="board"></div>
+  <div class="tracklabel">すごろく盤（🧍=主人公 / ☠=敵 / ♥=仲間 / 🧪=回復薬）</div>
+  <div class="track" id="board"></div>
 </div>
 
 <div class="panelgrid" id="panelgrid"></div>
 
 <div class="chantrow">
-  <input type="text" id="chant" placeholder="例: 3, 6, 9" autocomplete="off">
-  <button class="primary" id="cast">詠唱</button>
+  <button class="primary" id="cast">影分身を放つ</button>
   <button id="reset" aria-label="ステージをやり直す">やり直す</button>
-  <button id="ansbtn">答えを見る</button>
+  <button id="ansbtn">お手本を見る</button>
 </div>
 <div class="preview" id="preview"></div>
 
 <div class="anspanel" id="anspanel">
   <div class="head">
-    <span>想定解</span>
-    <button id="autoplay">見本を自動詠唱</button>
+    <span>お手本（射出順）</span>
+    <button id="autoplay">自動で放つ</button>
   </div>
   <div id="anslist"></div>
 </div>
@@ -316,6 +216,7 @@ footer a:hover{text-decoration:underline}
 <script>
 (function(){
 "use strict";
+/* ===== exact-rational core (unchanged) ===== */
 function bgcd(a,b){a=a<0n?-a:a;b=b<0n?-b:b;while(b){const t=a%b;a=b;b=t;}return a;}
 function F(n,d){d=d===undefined?1n:d;if(d<0n){n=-n;d=-d;}const g=bgcd(n,d)||1n;return{n:n/g,d:d/g};}
 const f0=F(0n),f1=F(1n);
@@ -324,7 +225,7 @@ function fsub(a,b){return F(a.n*b.d-b.n*a.d,a.d*b.d);}
 function fmul(a,b){return F(a.n*b.n,a.d*b.d);}
 function fdiv(a,b){return F(a.n*b.d,a.d*b.n);}
 
-// Berlekamp–Massey over the rationals (exact BigInt fractions).
+// Berlekamp–Massey over the rationals.
 function bm(S){
   let Q=[f1],L=0,B=[f1],n0=-1,b=f1;
   for(let n=0;n<S.length;n++){
@@ -340,13 +241,10 @@ function bm(S){
   return{L:L,Q:Q};
 }
 
-// Extend the chanted terms along the recovered recurrence.
-// Stops when a term becomes fractional ("dissipate"), leaves 1..maxlv ("out of
-// bounds"), or after a safety cap for periodic sequences. maxlv is the board's
-// top level: 99 for classic/endless, up to 9999 for high-order panel stages.
-const BOARD=99;
+// The squares a shadow clone steps: extend the chant along its recurrence,
+// stopping when a term turns fractional or leaves the board (|v|>maxlv).
 function traj(T,maxlv){
-  const M=BigInt(maxlv||BOARD);
+  const M=BigInt(maxlv||1000);
   const S=T.map(function(v){return F(v);});
   const r=bm(S);
   const c=[];
@@ -354,24 +252,19 @@ function traj(T,maxlv){
   const arr=S.slice(),path=T.slice();
   let end="";
   if(r.L>0){
-    for(let t=0;t<60;t++){
+    for(let t=0;t<80;t++){
       let v=f0;const i=arr.length;
       for(let j=1;j<=r.L;j++)v=fadd(v,fmul(c[j-1],arr[i-j]));
       if(v.d!==1n){end="dis";break;}
       const av=v.n<0n?-v.n:v.n;
       if(av>M){end="out";break;}
       arr.push(v);path.push(v.n);
-      if(path.length>=40){end="loop";break;}
+      if(path.length>=60){end="loop";break;}
     }
   }
   return{cost:Math.max(1,r.L),L:r.L,path:path,end:end,unique:2*r.L<=T.length};
 }
 
-/* ===GEN-CORE=== */
-// Endless stages (4+) are generated on the fly. Solution spells are built first,
-// then enemies are harvested from their actual traj() paths, so every generated
-// stage is solvable by construction. Everything is seeded by the stage number,
-// so the same stage always contains the same puzzle.
 function mulberry32(seed){
   return function(){
     seed=(seed+0x6D2B79F5)|0;
@@ -381,375 +274,18 @@ function mulberry32(seed){
   };
 }
 function ri(rnd,lo,hi){return lo+Math.floor(rnd()*(hi-lo+1));}
-function pick(rnd,arr){return arr[Math.floor(rnd()*arr.length)];}
-function igcd(a,b){while(b){const t=a%b;a=b;b=t;}return a;}
-function hitsOf(r,maxlv){
-  const M=BigInt(maxlv||BOARD),h=[];
-  r.path.forEach(function(v){if(v>0n&&v<=M)h.push(Number(v));});
-  return h;
-}
+function pick(rnd,a){return a[Math.floor(rnd()*a.length)];}
 
-// Spell makers return {t, cost, hits, why, arch} or null. Parameters are drawn
-// at random but every candidate is verified against traj() — the same referee
-// the player faces — so no analytic assumption about BM's interpretation leaks in.
-function mkArith(rnd){
-  const d=ri(rnd,3,17),a=ri(rnd,2,Math.min(30,99-3*d));
-  const t=[a,a+d,a+2*d,a+3*d].map(function(x){return BigInt(x);});
-  const r=traj(t);
-  if(r.L!==2||r.end!=="out")return null;
-  return{t:t,cost:r.cost,hits:hitsOf(r),arch:"arith",
-    why:"「+"+d+"の等差」（位数2）。4つ唱えると 位数×2 ＝ 4項に達して軌道が一意に確定し、99を超えるまで自動で掃く。"};
-}
-function mkGeo(rnd){
-  const m=pick(rnd,[2,2,3]),a=ri(rnd,2,Math.floor(99/(m*m)));
-  const t=[a,a*m].map(function(x){return BigInt(x);});
-  const r=traj(t);
-  if(r.L!==1||r.end!=="out"||r.path.length<3||r.path.length>6)return null;
-  return{t:t,cost:r.cost,hits:hitsOf(r),arch:"geo",
-    why:"「×"+m+"の等比」は位数1で1MP。倍々で撃ち抜き、99を超えて場外へ消える。間のレベルは飛び越える。"};
-}
-function mkPair(rnd){
-  // a=q*t, b=p*t with gcd(p,q)=gcd(t,q)=1 guarantees the next term p^2*t/q is
-  // fractional, so the spell kills exactly {a,b} and dissipates. Still verified.
-  const q=pick(rnd,[2,3,4,5]);
-  const ps=[];
-  for(let p=2;p<=3*q;p++)if(p!==q&&igcd(p,q)===1)ps.push(p);
-  const p=pick(rnd,ps),mx=Math.max(p,q);
-  const ks=[];
-  for(let k=1;k*mx<=99;k++)if(igcd(k,q)===1)ks.push(k);
-  if(!ks.length)return null;
-  const k=pick(rnd,ks),A=q*k,B=p*k;
-  const t=[BigInt(A),BigInt(B)];
-  const r=traj(t);
-  if(r.L!==1||r.end!=="dis"||r.path.length!==2)return null;
-  return{t:t,cost:r.cost,hits:hitsOf(r),arch:"pair",
-    why:A+"と"+B+"の2つだけなら「×"+p+"/"+q+"の等比」で1MP。次項は分数なので即霧散し、2体だけを安全に始末できる。"};
-}
-function mkSnipe(rnd,avoid){
-  for(let i=0;i<20;i++){
-    const a=ri(rnd,10,99);
-    if(avoid&&avoid.has(a))continue;
-    const t=[BigInt(a)];
-    const r=traj(t);
-    if(r.L!==1||r.end!=="out"||r.path.length!==1)continue;
-    return{t:t,cost:r.cost,hits:hitsOf(r),arch:"snipe",
-      why:a+"を1つだけ唱えると呪文書は「×"+a+"の等比」と解釈する。次項"+(a*a)+"は場外なので単体スナイプになる。"};
-  }
-  return null;
-}
-function mkBend(rnd){
-  const d=ri(rnd,3,15),a=ri(rnd,2,Math.min(20,95-3*d));
-  const es=[2,-2,3,-3,1,-1,4,-4];
-  for(let i=0;i<es.length;i++){
-    const x=a+3*d+es[i];
-    if(x<1||x>99||x===a+2*d)continue;
-    const t=[a,a+d,a+2*d,x].map(function(v){return BigInt(v);});
-    const r=traj(t);
-    if(r.L!==2||r.end!=="dis"||r.path.length!==4)continue;
-    return{t:t,cost:r.cost,hits:hitsOf(r),arch:"bend",lat:{a:a,d:d},
-      why:"最初は+"+d+"の等差に見せて、4項目の"+x+"で軌道をねじ曲げる。位数2のまま次項が分数になって霧散し、延長線上には何も届かない。"};
-  }
-  return null;
-}
-
-const FLAVORS={
-  arith:["整列スライムの行進","ゴブリン等間隔部隊","石像の回廊","骨の兵団、直進"],
-  geo:["倍々コウモリの群れ","分裂スライム","ねずみ算の巣窟","増殖キノコの森"],
-  pair:["はぐれ悪魔の二人組","双子の人食い花","相棒ゴーレム","つがいのワイバーン"],
-  snipe:["孤高の暗殺蜂","見張りのガーゴイル","一匹狼のリカント","はぐれキマイラ"],
-  bend:["幻影の等差竜","ミミックの隊列","蜃気楼の軍勢","ドッペルの偽装行軍"]
-};
-const HINTBITS={
-  arith:"等差の軌道は99を超えるまで勝手に飛ぶ",
-  geo:"掛け算の軌道は間のレベルを飛び越える",
-  pair:"比が割り切れない2つ組は、唱えた直後に霧散する",
-  snipe:"10以上の数を1つだけ唱えれば単体スナイプ",
-  bend:"素直な等差は延長線が危険。最後の項で軌道をねじ曲げろ"
-};
-
-// Difficulty curve by stage number.
-function curveFor(n,rnd){
-  if(n<=5)return{spells:2,pool:["arith","arith","geo","geo","snipe"],allies:0,slack:2};
-  if(n<=9)return{spells:2,pool:["arith","arith","geo","pair","pair","snipe"],allies:1,slack:2};
-  if(n<=14)return{spells:3,pool:["arith","geo","pair","pair","bend","snipe"],allies:1,slack:1};
-  if(n<=24)return{spells:3,pool:["arith","geo","pair","pair","bend","bend","snipe"],allies:ri(rnd,1,2),slack:1};
-  return{spells:n%4===0?4:3,pool:["arith","geo","pair","pair","bend","bend","snipe"],allies:ri(rnd,1,2),slack:1};
-}
-
-// Replays a stage's own sol through traj() and checks it actually wins:
-// every enemy dies, no ally is hit, and the total cost matches par.
-function simulate(st){
-  const killed={},M=BigInt(st.maxlv||BOARD);
-  let cost=0,ff=false;
-  st.sol.forEach(function(c){
-    const r=traj(c.t,st.maxlv);
-    cost+=r.cost;
-    r.path.forEach(function(v){
-      if(v>0n&&v<=M){
-        const num=Number(v);
-        if(st.enemies.indexOf(num)>=0)killed[num]=true;
-        if(st.allies.indexOf(num)>=0)ff=true;
-      }
-    });
+// Distinct board squares [0..B] a clone steps, in path order, plus cost/order.
+function stepInfo(t,B){
+  const r=traj(t,B),sq=[],seen=new Set();
+  r.path.forEach(function(v){
+    if(v>=0n&&v<=BigInt(B)){const n=Number(v);if(!seen.has(n)){seen.add(n);sq.push(n);}}
   });
-  return !ff&&cost===st.par&&cost<=st.mp&&
-    st.enemies.every(function(lv){return killed[lv];});
+  return{sq:sq,cost:r.cost,L:r.L,end:r.end,path:r.path,unique:r.unique};
 }
 
-function tryGen(n,rnd){
-  const cv=curveFor(n,rnd);
-  // Draw archetypes; at most one arith and one bend per stage, snipes last so
-  // they can pick targets outside the other spells' hit sets.
-  const pool=cv.pool.slice(),archs=[];
-  for(let i=0;i<cv.spells;i++){
-    const ar=pool.length?pick(rnd,pool):"snipe";
-    archs.push(ar);
-    if(ar==="arith"||ar==="bend")
-      for(let j=pool.length-1;j>=0;j--)if(pool[j]===ar)pool.splice(j,1);
-  }
-  archs.sort(function(x,y){return(x==="snipe")-(y==="snipe");});
-  const spells=[],used=new Set();
-  for(let i=0;i<archs.length;i++){
-    let sp=null;
-    if(archs[i]==="arith")sp=mkArith(rnd);
-    else if(archs[i]==="geo")sp=mkGeo(rnd);
-    else if(archs[i]==="pair")sp=mkPair(rnd);
-    else if(archs[i]==="bend")sp=mkBend(rnd);
-    else sp=mkSnipe(rnd,used);
-    if(!sp)return null;
-    sp.hits.forEach(function(v){used.add(v);});
-    spells.push(sp);
-  }
-  // Each spell must own at least one target no other spell covers.
-  for(let i=0;i<spells.length;i++){
-    const others=new Set();
-    spells.forEach(function(sp,j){if(j!==i)sp.hits.forEach(function(v){others.add(v);});});
-    if(!spells[i].hits.some(function(v){return !others.has(v);}))return null;
-  }
-  // Enemies: arithmetic sweeps contribute their first three lattice points plus
-  // one or two later ones (the sweep still clears the rest); other spells
-  // contribute every hit.
-  const eset=new Set();
-  spells.forEach(function(sp){
-    if(sp.arch==="arith"){
-      sp.hits.slice(0,3).forEach(function(v){eset.add(v);});
-      const extra=ri(rnd,1,2);
-      for(let i=0;i<extra;i++)eset.add(sp.hits[ri(rnd,3,sp.hits.length-1)]);
-    }else{
-      sp.hits.forEach(function(v){eset.add(v);});
-    }
-  });
-  const enemies=Array.from(eset).sort(function(x,y){return x-y;});
-  if(enemies.length<5||enemies.length>12)return null;
-  // Allies as traps: prefer the extension of a bend's fake lattice (stage 3's
-  // 55) or of an arithmetic run in the enemy list (stage 2's 25); otherwise a
-  // random level off every solution path. Never on a sol trajectory.
-  const allies=[];
-  if(cv.allies>0){
-    const cands=[];
-    spells.forEach(function(sp){
-      if(sp.arch==="bend"){cands.push(sp.lat.a+3*sp.lat.d);cands.push(sp.lat.a+4*sp.lat.d);}
-    });
-    for(let i=0;i+2<enemies.length;i++){
-      const d1=enemies[i+1]-enemies[i];
-      if(d1>0&&enemies[i+2]-enemies[i+1]===d1)cands.push(enemies[i+2]+d1);
-    }
-    cands.forEach(function(v){
-      if(allies.length<cv.allies&&v>=1&&v<=99&&!used.has(v)&&
-         enemies.indexOf(v)<0&&allies.indexOf(v)<0)allies.push(v);
-    });
-    for(let tr=0;tr<30&&allies.length<cv.allies;tr++){
-      const v=ri(rnd,2,99);
-      if(!used.has(v)&&enemies.indexOf(v)<0&&allies.indexOf(v)<0)allies.push(v);
-    }
-    if(!allies.length)return null;
-  }
-  let par=0;
-  spells.forEach(function(sp){par+=sp.cost;});
-  const main=spells.reduce(function(a,b){return b.cost>a.cost?b:a;},spells[0]);
-  const seen={},bits=[];
-  spells.forEach(function(sp){
-    if(!seen[sp.arch]){seen[sp.arch]=true;bits.push(HINTBITS[sp.arch]);}
-  });
-  const st={
-    name:"ステージ"+n+" "+pick(rnd,FLAVORS[main.arch]),
-    enemies:enemies,allies:allies,mp:par+cv.slack,par:par,
-    hint:"ヒント: "+bits.join("。")+"。"+(allies.length?"延長線上の仲間に注意。":""),
-    sol:spells.map(function(sp){return{t:sp.t,why:sp.why};})
-  };
-  return simulate(st)?st:null;
-}
-
-// Always-solvable safety net: k lone targets >= 10, each dies to its own
-// one-term snipe (the next term a*a is already out of bounds).
-function fallbackStage(n){
-  const rnd=mulberry32((n*0x9E3779B9)>>>0);
-  const k=2+n%3,eset=new Set();
-  while(eset.size<k)eset.add(ri(rnd,10,99));
-  const enemies=Array.from(eset).sort(function(x,y){return x-y;});
-  return{
-    name:"ステージ"+n+" はぐれ魔物の掃討",
-    enemies:enemies,allies:[],mp:k+1,par:k,
-    hint:"ヒント: 10以上の数を1つだけ唱えた魔法は「×その数」の等比。すぐ場外に消えるので単体スナイプになる。",
-    sol:enemies.map(function(a){
-      return{t:[BigInt(a)],why:a+"を1つだけ唱えて単体スナイプ。次項"+(a*a)+"は場外。"};
-    })
-  };
-}
-
-function genStage(n){
-  for(let at=0;at<40;at++){
-    const st=tryGen(n,mulberry32((n*0x9E3779B9^at*0x85EBCA6B)>>>0));
-    if(st)return st;
-  }
-  return fallbackStage(n);
-}
-
-/* ===HI-ORDER=== */
-// High-order panel stages play on a taller board so the richer recurrences have
-// room to roam: enemy and ally levels may reach HIMAX (9999), while classic and
-// endless stages keep the proven 1..99 board.
-const HIMAX=9999;
-// Panel mode's dedicated high-order puzzles. A random small-integer linear
-// recurrence of order K is drawn, its orbit simulated; the first 2K in-range
-// terms become the chant so Berlekamp–Massey locks onto order K, and the whole
-// thing is verified with traj() — the same referee the player faces.
-function mkHi(rnd,minOrder,maxlv){
-  const CR=2,M=maxlv||HIMAX;
-  for(let att=0;att<160;att++){
-    const K=minOrder,c=[];
-    for(let j=0;j<K;j++)c.push(ri(rnd,-CR,CR));
-    if(c[K-1]===0)c[K-1]=pick(rnd,[-1,1,2,-2]);
-    const orbit=[];
-    for(let j=0;j<K;j++)orbit.push(ri(rnd,1,14));
-    let bad=false;
-    for(let step=0;step<50;step++){
-      let v=0;
-      for(let j=1;j<=K;j++)v+=c[j-1]*orbit[orbit.length-j];
-      if(!Number.isSafeInteger(v)){bad=true;break;}
-      if(Math.abs(v)>M)break;
-      orbit.push(v);
-      if(orbit.length>=40)break;
-    }
-    if(bad||orbit.length<2*K+1)continue;
-    const t=orbit.slice(0,2*K).map(function(x){return BigInt(x);});
-    if(t.some(function(x){return x<1n||x>BigInt(M);}))continue;
-    const r=traj(t,M);
-    if(r.L<minOrder||r.end==="")continue;
-    const hits=hitsOf(r,M);
-    if(new Set(hits).size<Math.max(3,minOrder))continue;
-    return{t:t,cost:r.cost,hits:hits,arch:"hi",
-      why:"位数"+r.L+"の漸化式。"+t.slice(0,4).map(function(x){return x.toString();}).join(", ")+"… と続き、軌道が敵をまとめて貫く。"};
-  }
-  return null;
-}
-function tryGenHi(n,rnd,minOrder,maxlv){
-  // One order>=minOrder spell whose orbit is the whole enemy set: the puzzle is
-  // to pick that single correct recurrence out of equally high-order decoys.
-  // Allies are levels off the solution's orbit (never hit by the correct spell)
-  // that a careless wrong pick can still strike for the +2 MP penalty.
-  const M=maxlv||HIMAX;
-  const sp=mkHi(rnd,minOrder,M);
-  if(!sp)return null;
-  let enemies=Array.from(new Set(sp.hits)).sort(function(a,b){return a-b;});
-  if(enemies.length<4)return null;
-  if(enemies.length>10){
-    const arr=enemies.slice();
-    for(let i=arr.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1)),tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;}
-    enemies=arr.slice(0,10).sort(function(a,b){return a-b;});
-  }
-  const solPath=new Set(traj(sp.t,M).path.map(function(v){return Number(v);}));
-  const allies=[],lo=Math.max(1,enemies[0]-2),hi=Math.min(M,Math.max(enemies[enemies.length-1],enemies[0]+30));
-  const want=ri(rnd,1,2);
-  for(let tr=0;tr<120&&allies.length<want;tr++){
-    const v=ri(rnd,lo,hi);
-    if(v>=1&&!solPath.has(v)&&enemies.indexOf(v)<0&&allies.indexOf(v)<0)allies.push(v);
-  }
-  allies.sort(function(a,b){return a-b;});
-  const par=sp.cost;
-  const st={
-    name:"高位数の試練 #"+n+"（最低位数"+minOrder+"）",
-    enemies:enemies,allies:allies,mp:par,par:par,maxlv:M,
-    hint:"ヒント: 位数"+minOrder+"以上の漸化式。正しい1本を選べば軌道が敵をまとめて貫く。外すとMP切れ。"+(allies.length?"延長線上の仲間（♥）に当てると回復に+2MP。":""),
-    sol:[{t:sp.t,why:sp.why}],
-    minOrder:minOrder
-  };
-  return simulate(st)?st:null;
-}
-function genHiStage(n,minOrder){
-  minOrder=minOrder||3;
-  for(let mo=minOrder;mo>=1;mo--){
-    for(let at=0;at<60;at++){
-      const st=tryGenHi(n,mulberry32(((n*0x9E3779B9)^(at*0x85EBCA6B)^(mo*0x27D4EB2F))>>>0),mo);
-      if(st)return st;
-    }
-  }
-  return null;
-}
-function minOrderFor(n){return Math.min(6,3+Math.floor((n-1)/6));}
-/* ===/HI-ORDER=== */
-/* ===/GEN-CORE=== */
-
-const stages=[
- {name:"ステージ1 スライム講習会",enemies:[3,6,9,12,15],allies:[],mp:3,par:2,
-  hint:"ヒント: 等差数列は3つ唱えれば軌道が伝わる。あとは勝手に飛んでいく。",
-  sol:[{t:[3n,6n,9n,12n],why:"「+3の等差」（位数2）。4つ唱えると 位数×2 ＝ 4項に達し、軌道が一意に確定（緑バッジ）。軌道は15以降も99まで自動で掃く。実は3つでも呪文書は同じ解釈をするので2MPでクリアできる。"}]},
- {name:"ステージ2 毒キノコの罠",enemies:[5,10,15,20,40,80],allies:[25],mp:3,par:2,
-  hint:"ヒント: 足し算の軌道は仲間を貫く。掛け算なら…?",
-  sol:[{t:[5n,10n,20n],why:"「×2の等比」は位数1で1MP。軌道は40, 80を撃ち抜き160で場外。25の仲間は飛び越える。"},
-       {t:[15n],why:"1つだけ唱えると呪文書は「×15の等比」と解釈（解釈複数の状態だが決定的）。次項225は場外なので単体スナイプになる。"}]},
- {name:"ステージ3 フィボナッチの亡霊",enemies:[2,3,5,8,13,21,34,89],allies:[55],mp:6,par:4,
-  hint:"ヒント: 一掃したくなる並びだが延長線が危険。軌道は途中で折り曲げて自壊させられる。2つの数だけ唱えた魔法は必ず1MP。",
-  sol:[{t:[2n,5n],why:"2つだけなら「×5/2の等比」で1MP（2項・位数1なので軌道は一意に確定）。次項12.5は分数なので即霧散。"},
-       {t:[3n,8n,13n,21n],why:"最初は+5の等差に見せて、4項目の21で軌道をねじ曲げる。位数2（係数41/25と−1/25）になり、次項848/25で霧散。55の仲間には永遠に届かない。"},
-       {t:[34n,89n],why:"「×89/34の等比」で1MP。次項は分数で霧散。フィボナッチの残党を安全に始末。"}]}
-];
-let si=0,alive=[],mpUsed=0,dead=false,playing=false;
-
-const HAND=stages.length,genCache=new Map();
-function stageAt(i){
-  if(i<HAND)return stages[i];
-  if(!genCache.has(i))genCache.set(i,genStage(i+1));
-  return genCache.get(i);
-}
-// Panel mode has its own dedicated high-order campaign: same stage numbers as
-// the bar, but every stage is a genHiStage whose minimum order grows with depth.
-const hiCache=new Map();
-function panelStageAt(i){
-  if(!hiCache.has(i))hiCache.set(i,genHiStage(i+1,minOrderFor(i+1)));
-  return hiCache.get(i);
-}
-// A one-off puzzle built from the "問題をつくる" page overrides the campaign
-// stage while active (panel mode only).
-let customStage=null,customSeed=0,customPanels=null;
-function cur(){
-  if(mode==="panel")return customStage||panelStageAt(si);
-  return stageAt(si);
-}
-
-// Highest unlocked stage index; clearing stage si unlocks si+1.
-let reached=HAND;
-try{
-  const v=parseInt(localStorage.getItem("lfnb-reached"),10);
-  if(v>reached)reached=v;
-}catch(e){}
-function saveReached(i){
-  if(i<=reached)return;
-  reached=i;
-  try{localStorage.setItem("lfnb-reached",String(reached));}catch(e){}
-}
-
-function $(id){return document.getElementById(id);}
-function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
-function uqBadge(r){
-  if(r.unique)return '<span class="badge ok">軌道確定</span>';
-  return '<span class="badge amb">解釈複数（'+(2*r.L)+'項で確定）</span>';
-}
-
-/* ===PANEL-MODE=== */
-// A panel is still just a chant t: the displayed recurrence is recovered from
-// t with the same Berlekamp–Massey the spellbook uses, so what the card says
-// is exactly how the spell will fly. Coefficients can be fractions (×5/2 の等比 etc.).
+// Display the recurrence recovered from the chant (coefficients may be fractions).
 function fmtRec(t){
   const r=bm(t.map(function(v){return F(v);}));
   let s="",any=false;
@@ -766,282 +302,341 @@ function fmtRec(t){
   if(!any)s="0";
   return "A<sub>i</sub> = "+s+" (i ≥ "+Math.max(1,r.L)+")";
 }
-function fmtTerms(r){
-  const s=r.path.slice(0,4).map(function(v){return v.toString();}).join(", ");
-  if(r.path.length>4)return s+", …";
-  return s+(r.end==="dis"?" › 霧散":r.end==="out"?" › 場外":", …");
-}
-function mkPanel(t,maxlv){
-  const r=traj(t,maxlv);
-  return{t:t,r:r,key:r.path.join(",")+"|"+r.end,rec:fmtRec(t),terms:fmtTerms(r)};
+
+/* ===== stage generation =====
+   A clone whose recurrence order is >= minOrder, staying within the board. */
+function mkHi(rnd,minOrder,B){
+  const CR=2;
+  for(let att=0;att<160;att++){
+    const K=minOrder,c=[];
+    for(let j=0;j<K;j++)c.push(ri(rnd,-CR,CR));
+    if(c[K-1]===0)c[K-1]=pick(rnd,[-1,1,2,-2]);
+    const orbit=[];
+    for(let j=0;j<K;j++)orbit.push(ri(rnd,1,Math.min(14,B-1)));
+    let bad=false;
+    for(let step=0;step<60;step++){
+      let v=0;
+      for(let j=1;j<=K;j++)v+=c[j-1]*orbit[orbit.length-j];
+      if(!Number.isSafeInteger(v)){bad=true;break;}
+      if(Math.abs(v)>B)break;
+      orbit.push(v);
+      if(orbit.length>=40)break;
+    }
+    if(bad||orbit.length<2*K+1)continue;
+    const t=orbit.slice(0,2*K).map(function(x){return BigInt(x);});
+    if(t.some(function(x){return x<0n||x>BigInt(B);}))continue;
+    const info=stepInfo(t,B);
+    if(info.L<minOrder||info.end==="")continue;
+    if(new Set(info.sq.filter(function(s){return s>=1;})).size<Math.max(3,minOrder))continue;
+    return{t:t,cost:info.cost,L:info.L,sq:info.sq};
+  }
+  return null;
 }
 
-// Panels for a stage: every reference solution plus seeded decoys, shuffled.
-// Decoys are real castable spells (verified via traj). In a high-order stage
-// (st.minOrder>=3) every panel — solutions and decoys alike — is order>=minOrder,
-// so the player only ever chooses among order-3+ recurrences. Otherwise decoys
-// are near misses of a sol chant, ally traps, or unrelated spells.
-function buildPanels(st,seed){
-  const rnd=mulberry32(seed>>>0),maxlv=st.maxlv||BOARD;
-  const minOrd=st.minOrder||0;
-  const all=st.sol.map(function(c){return mkPanel(c.t,maxlv);});
-  const seen=new Set(all.map(function(p){return p.key;}));
-  const need=Math.max(3,6-all.length);
-  let made=0,guard=0;
-  function tryAdd(t){
-    const p=mkPanel(t,maxlv);
-    if(seen.has(p.key)||p.r.cost>st.mp)return;
-    if(minOrd&&p.r.L<minOrd)return;
-    seen.add(p.key);all.push(p);made++;
+// One solvable sugoroku puzzle: 2-3 solution clones whose union of stepped
+// squares are the enemies (one square per non-final clone reserved for a
+// funding potion), allies off every solution path (one on a decoy = a trap),
+// potions sized so the clones must be launched in a funding order. Seeded, so
+// the same stage is always the same puzzle. Verified by replaying the intent.
+function tryGen(seed,minOrder,B){
+  const rnd=mulberry32(seed>>>0);
+  const nSol=ri(rnd,2,3);
+  const sol=[],covered=new Set();
+  for(let i=0;i<nSol;i++){
+    let sp=null;
+    for(let att=0;att<100&&!sp;att++){
+      const cand=mkHi(rnd,minOrder,B);
+      if(!cand)continue;
+      if(!cand.sq.some(function(s){return s>=1&&!covered.has(s);}))continue;
+      sp=cand;
+    }
+    if(!sp)return null;
+    sp.sq.forEach(function(s){if(s>=1)covered.add(s);});
+    sol.push(sp);
   }
-  while(made<need&&guard++<500){
-    if(minOrd>=3){
-      const sp=mkHi(rnd,minOrd,maxlv);
-      if(sp)tryAdd(sp.t);
-    }else{
-      const kind=ri(rnd,0,3);
-      if(kind===0){
-        const t0=pick(rnd,st.sol).t,off=BigInt(pick(rnd,[-3,-2,-1,1,2,3]));
-        const t=t0.map(function(v){return v+off;});
-        if(t.every(function(v){return v>0n&&v<=99n;}))tryAdd(t);
-      }else if(kind===1&&st.allies.length){
-        const A=pick(rnd,st.allies),d=ri(rnd,2,9),a=A-3*d;
-        if(a>=1)tryAdd([a,a+d,a+2*d].map(function(v){return BigInt(v);}));
-      }else{
-        const mk=pick(rnd,[mkArith,mkGeo,mkPair,mkSnipe]),sp=mk(rnd);
-        if(sp)tryAdd(sp.t);
-      }
+  const orders=sol.map(function(sp){return sp.cost;});
+  const mpMax=Math.max.apply(null,orders);
+  // reserve one funding-potion square on each non-final clone
+  const reserved=[],resSet=new Set();
+  for(let i=0;i<sol.length-1;i++){
+    const cand=sol[i].sq.filter(function(s){return s>=1&&!resSet.has(s);});
+    if(!cand.length)return null;
+    const r=cand[ri(rnd,0,cand.length-1)];
+    reserved.push(r);resSet.add(r);
+  }
+  let enemies=Array.from(covered).filter(function(s){return !resSet.has(s);}).sort(function(a,b){return a-b;});
+  if(enemies.length<4||enemies.length>12)return null;
+  for(let i=0;i<sol.length;i++){
+    const set=new Set(sol[i].sq);
+    if(enemies.every(function(e){return set.has(e);}))return null;      // no single-clone clear
+    const others=new Set();
+    sol.forEach(function(sp,j){if(j!==i)sp.sq.forEach(function(s){others.add(s);});});
+    if(!sol[i].sq.some(function(s){return enemies.indexOf(s)>=0&&!others.has(s);}))return null; // owns a unique enemy
+  }
+  const potions=reserved.map(function(sq,i){
+    const need=orders[i+1];
+    return{sq:sq,heal:Math.min(mpMax,Math.max(need,ri(rnd,need,mpMax)))};
+  });
+  const allSol=new Set();sol.forEach(function(sp){sp.sq.forEach(function(s){allSol.add(s);});});
+  const allies=[],wantA=ri(rnd,1,2);
+  for(let tr=0;tr<300&&allies.length<wantA;tr++){
+    const v=ri(rnd,1,B);
+    if(!allSol.has(v)&&enemies.indexOf(v)<0&&allies.indexOf(v)<0)allies.push(v);
+  }
+  if(!allies.length)return null;
+  allies.sort(function(a,b){return a-b;});
+  // replay the intended order and confirm it wins cleanly
+  let mp=mpMax;const dead=new Set(),used=new Set();
+  for(let i=0;i<sol.length;i++){
+    if(mp<orders[i])return null;
+    mp-=orders[i];
+    const set=new Set(sol[i].sq);
+    for(let a=0;a<allies.length;a++)if(set.has(allies[a]))return null;
+    enemies.forEach(function(e){if(set.has(e))dead.add(e);});
+    potions.forEach(function(p){if(set.has(p.sq)&&!used.has(p.sq)){used.add(p.sq);mp=Math.min(mpMax,mp+p.heal);}});
+  }
+  if(!enemies.every(function(e){return dead.has(e);}))return null;
+  // decoys up to 6 clones; guarantee at least one steps an ally (a trap)
+  const clones=sol.map(function(sp){return sp.t;});
+  const sigs=new Set(clones.map(function(t){return stepInfo(t,B).sq.join(",");}));
+  let trap=false,guard=0;
+  while(clones.length<6&&guard++<500){
+    const d=mkHi(rnd,minOrder,B);if(!d)continue;
+    const set=new Set(d.sq);
+    if(enemies.every(function(e){return set.has(e);}))continue;   // no single-clone clear
+    const sig=d.sq.join(",");if(sigs.has(sig))continue;
+    const hitsAlly=allies.some(function(a){return set.has(a);});
+    if(clones.length>=5&&!trap&&!hitsAlly)continue;
+    sigs.add(sig);clones.push(d.t);if(hitsAlly)trap=true;
+  }
+  if(clones.length<6)return null;
+  // shuffle the six
+  for(let i=clones.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1)),tmp=clones[i];clones[i]=clones[j];clones[j]=tmp;}
+  return{
+    enemies:enemies,allies:allies,potions:potions,
+    mp:mpMax,par:orders.reduce(function(a,b){return a+b;},0),
+    sol:sol.map(function(sp){return sp.t;}),clones:clones,
+    minOrder:minOrder,boardMax:B
+  };
+}
+function genSugoroku(seed,minOrder,B){
+  minOrder=minOrder||2;B=B||48;
+  for(let mo=minOrder;mo>=2;mo--){
+    for(let at=0;at<90;at++){
+      const st=tryGen((seed*0x9E3779B9^at*0x85EBCA6B^mo*0x27D4EB2F)>>>0,mo,B);
+      if(st){st.name=stageName(seed,st);return st;}
     }
   }
-  for(let i=all.length-1;i>0;i--){
-    const j=Math.floor(rnd()*(i+1)),tmp=all[i];all[i]=all[j];all[j]=tmp;
-  }
-  return all;
+  return null;
 }
-// Panels for the current panel-mode view (custom puzzle or campaign stage si).
-const panelCache=new Map();
-function curPanels(){
-  if(customStage){
-    if(!customPanels)customPanels=buildPanels(customStage,customSeed);
-    return customPanels;
-  }
-  if(!panelCache.has(si))panelCache.set(si,buildPanels(panelStageAt(si),(((si+1)*0x9E3779B9)^0x50414E4C)>>>0));
-  return panelCache.get(si);
-}
-/* ===/PANEL-MODE=== */
+function stageName(seed,st){return "すごろく #"+((seed%9000)+1)+"（最低位数"+st.minOrder+"・"+st.boardMax+"マス）";}
 
+/* ===== campaign stages ===== */
+const CAMPN=3,BOARDLEN=48;
+function minOrderFor(n){return Math.min(4,2+Math.floor((n-1)/6));}
+const campCache=new Map();
+function campaign(i){
+  if(!campCache.has(i)){
+    const seed=((i+1)*0x9E3779B9)>>>0;
+    const st=genSugoroku(seed,minOrderFor(i+1),BOARDLEN)||genSugoroku(seed^0x1234,2,BOARDLEN);
+    st.name="ステージ"+(i+1)+"  "+st.name.replace(/^すごろく #\d+/,"影分身の試練");
+    campCache.set(i,st);
+  }
+  return campCache.get(i);
+}
+
+/* ===== state ===== */
+let si=0,mpNow=0,over=false,won=false,selIdx=-1,playing=false;
+let dead=new Set(),potUsed=new Set();
+let customStage=null,customName="";
+function cur(){return customStage||campaign(si);}
+
+let reached=CAMPN;
+try{const v=parseInt(localStorage.getItem("lfnb-reached"),10);if(v>reached)reached=v;}catch(e){}
+function saveReached(i){if(i<=reached)return;reached=i;try{localStorage.setItem("lfnb-reached",String(reached));}catch(e){}}
+
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+
+// occupant lookup for a square
+function occAt(st,sq){
+  if(st.enemies.indexOf(sq)>=0)return{kind:"enemy",dead:dead.has(sq)};
+  if(st.allies.indexOf(sq)>=0)return{kind:"ally"};
+  for(let i=0;i<st.potions.length;i++)if(st.potions[i].sq===sq)return{kind:"potion",heal:st.potions[i].heal,used:potUsed.has(sq)};
+  return null;
+}
+function stepSet(t){const st=cur();return new Set(stepInfo(t,st.boardMax).sq);}
+
+/* ===== rendering ===== */
 const sb=$("stagebtns");
 function goStage(i){customStage=null;si=i;initStage();}
 function refreshBar(){
   sb.innerHTML="";
   const custom=!!customStage;
-  stages.forEach(function(s,i){
+  for(let i=0;i<CAMPN;i++){
     const b=document.createElement("button");
     b.textContent=(i+1)+" 面";
     if(!custom&&i===si)b.className="on";
-    b.onclick=function(){if(playing)return;goStage(i);};
+    (function(k){b.onclick=function(){if(playing)return;goStage(k);};})(i);
     sb.appendChild(b);
-  });
+  }
   const inf=document.createElement("button");
-  inf.textContent=si>=HAND?"∞ "+(si+1)+" 面":"∞ "+(HAND+1)+" 面〜";
-  if(!custom&&si>=HAND)inf.className="on";
-  inf.onclick=function(){if(playing)return;goStage(si>=HAND?si:reached);};
+  inf.textContent=si>=CAMPN?"∞ "+(si+1)+" 面":"∞ "+(CAMPN+1)+" 面〜";
+  if(!custom&&si>=CAMPN)inf.className="on";
+  inf.onclick=function(){if(playing)return;goStage(si>=CAMPN?si:reached);};
   sb.appendChild(inf);
-  if(si>=HAND){
+  if(si>=CAMPN){
     const prev=document.createElement("button");
-    prev.textContent="◀";
-    prev.disabled=!custom&&si<=HAND;
-    prev.setAttribute("aria-label","前の面へ");
+    prev.textContent="◀";prev.disabled=!custom&&si<=CAMPN;prev.setAttribute("aria-label","前の面へ");
     prev.onclick=function(){if(playing)return;goStage(custom?si:si-1);};
     sb.appendChild(prev);
     const next=document.createElement("button");
-    next.textContent="▶";
-    next.disabled=!custom&&si>=reached;
-    next.setAttribute("aria-label","次の面へ");
+    next.textContent="▶";next.disabled=!custom&&si>=reached;next.setAttribute("aria-label","次の面へ");
     next.onclick=function(){if(playing)return;goStage(si+1);};
     sb.appendChild(next);
   }
 }
 
-function initStage(){
-  const s=cur();
-  alive=s.enemies.map(function(){return true;});
-  mpUsed=0;dead=false;selIdx=-1;
-  $("log").innerHTML="";
-  $("banner").style.display="none";
-  $("chant").value="";
-  $("preview").textContent="";
-  $("anspanel").style.display="none";
-  refreshBar();
-  refreshMode();
-  render();
+function minClone(st){
+  let m=Infinity;
+  st.clones.forEach(function(t){m=Math.min(m,stepInfo(t,st.boardMax).cost);});
+  return m;
 }
-
 function render(){
-  const s=cur();
-  $("stname").textContent=s.name;
-  $("hint").textContent=s.hint;
-  const left=s.mp-mpUsed;
-  $("mpnow").innerHTML='MP <b class="'+(left<=1?"low":"")+'">'+left+"</b> / "+s.mp;
+  const st=cur();
+  $("stname").textContent=st.name;
+  const enemiesLeft=st.enemies.filter(function(e){return !dead.has(e);}).length;
+  $("hint").textContent="敵 残り"+enemiesLeft+"／"+st.enemies.length+"体。仲間を踏まずに全滅させろ。回復薬でMPを繋げ。";
+  $("mpnow").innerHTML='MP <b class="'+(mpNow<minClone(st)?"low":"")+'">'+mpNow+"</b> / "+st.mp;
+  const sel=(selIdx>=0&&!over)?stepSet(st.clones[selIdx]):null;
+  const occMax=Math.max.apply(null,[0].concat(st.enemies,st.allies,st.potions.map(function(p){return p.sq;})));
+  let rmax=Math.min(st.boardMax,occMax+2);
+  if(sel)sel.forEach(function(s){if(s<=st.boardMax)rmax=Math.max(rmax,Math.min(st.boardMax,s+1));});
   const bd=$("board");bd.innerHTML="";
-  s.enemies.forEach(function(lv,i){
-    const c=document.createElement("span");
-    c.className="chip enemy"+(alive[i]?"":" dead");
-    c.textContent="☠ Lv "+lv;
-    bd.appendChild(c);
-  });
-  s.allies.forEach(function(lv){
-    const c=document.createElement("span");
-    c.className="chip ally";
-    c.textContent="♥ 仲間 Lv "+lv;
-    bd.appendChild(c);
-  });
+  for(let i=0;i<=rmax;i++){
+    const cell=document.createElement("div");
+    let cls="cell";
+    const occ=occAt(st,i);
+    let ic="",sub="";
+    if(i===0){cls+=" hero";ic="🧍";}
+    if(occ){
+      if(occ.kind==="enemy"){cls+=" enemy"+(occ.dead?" dead":"");ic="☠";}
+      else if(occ.kind==="ally"){cls+=" ally";ic="♥";}
+      else if(occ.kind==="potion"){cls+=" potion"+(occ.used?" used":"");ic="🧪";sub="+"+occ.heal;}
+    }
+    if(sel&&sel.has(i)){
+      cls+=" step";
+      if(occ&&occ.kind==="ally")cls+=" step-danger";
+      else if(occ&&occ.kind==="enemy"&&!occ.dead)cls+=" step-hit";
+      else if(occ&&occ.kind==="potion"&&!occ.used)cls+=" step-heal";
+    }
+    cell.className=cls;
+    cell.innerHTML='<span class="num">'+i+'</span><span class="ic">'+ic+'</span>'+(sub?'<span class="sub">'+sub+'</span>':'<span class="sub"></span>');
+    bd.appendChild(cell);
+  }
 }
 
-function parse(){
-  const toks=$("chant").value.trim().split(/[,、\s]+/).filter(function(x){return x.length;});
-  if(!toks.length)return null;
-  try{return toks.map(function(t){if(!/^-?\d+$/.test(t))throw 0;return BigInt(t);});}catch(e){return null;}
+function cardTerms(t){
+  const st=cur(),info=stepInfo(t,st.boardMax);
+  const s=info.path.slice(0,6).map(function(v){return v.toString();}).join(" › ");
+  const tail=info.path.length>6?" › …":(info.end==="dis"?" › 霧散":info.end==="out"?" › 場外":"");
+  return "踏むマス: "+s+tail;
 }
-
-function showPreview(T){
-  const pv=$("preview");
-  if(!T){pv.textContent="";return;}
-  const s=cur(),r=traj(T,s.maxlv);
-  const shown=r.path.slice(0,18).map(function(v){return v.toString();}).join(" › ");
-  const tail=r.end==="dis"?" › 霧散":r.end==="out"?" › 場外":r.path.length>18?" › …":"";
-  let warn="";
-  s.allies.forEach(function(lv){if(r.path.some(function(v){return v===BigInt(lv);}))warn=" ／ 仲間に直撃コース！";});
-  pv.innerHTML=uqBadge(r)+"消費MP "+r.cost+"（位数"+r.L+"）／ 軌道: "+esc(shown+tail)+'<span class="warn-t">'+esc(warn)+"</span>";
-}
-$("chant").addEventListener("input",function(){showPreview(parse());});
-
-// Panel-selection mode vs classic text input. Sticky via localStorage.
-let mode="panel",selIdx=-1;
-try{if(localStorage.getItem("lfnb-mode")==="classic")mode="classic";}catch(e){}
 function renderPanels(){
-  const pg=$("panelgrid");
+  const st=cur(),pg=$("panelgrid");
   pg.innerHTML="";
-  if(mode!=="panel")return;
-  curPanels().forEach(function(p,i){
+  st.clones.forEach(function(t,i){
+    const info=stepInfo(t,st.boardMax);
     const b=document.createElement("button");
     b.className="spellcard"+(i===selIdx?" sel":"");
-    b.innerHTML='<span class="rec">'+p.rec+'</span><span class="terms">'+esc(p.terms)+'</span><span class="cost">消費MP '+p.r.cost+"</span>";
-    b.onclick=function(){
-      if(playing)return;
-      selIdx=selIdx===i?-1:i;
-      renderPanels();
-      showPreview(selIdx>=0?p.t:null);
-    };
+    b.innerHTML='<span class="rec">'+fmtRec(t)+'</span><span class="terms">'+esc(cardTerms(t))+'</span><span class="cost">消費MP '+info.cost+"</span>";
+    (function(k,tt){b.onclick=function(){
+      if(playing||over)return;
+      selIdx=selIdx===k?-1:k;
+      renderPanels();render();
+      showPreview(selIdx>=0?tt:null);
+    };})(i,t);
     pg.appendChild(b);
   });
 }
-function refreshMode(){
-  $("modepanel").className=mode==="panel"?"on":"";
-  $("modeclassic").className=mode==="classic"?"on":"";
-  $("panelgrid").style.display=mode==="panel"?"grid":"none";
-  $("chant").style.display=mode==="panel"?"none":"";
-  renderPanels();
-}
-function setMode(m){
-  if(playing||mode===m)return;
-  mode=m;
-  try{localStorage.setItem("lfnb-mode",m);}catch(e){}
-  selIdx=-1;
-  // Panel and classic show different stages (high-order vs classic), so reload
-  // the current-mode stage fresh rather than leaving a stale board.
-  initStage();
-}
-$("modepanel").onclick=function(){setMode("panel");};
-$("modeclassic").onclick=function(){setMode("classic");};
 
-// "問題をつくる": generate a one-off high-order puzzle at the chosen minimum
-// order and drop the player straight into it (panel mode).
-$("mgen").onclick=function(){
-  if(playing)return;
-  let mo=parseInt($("minord").value,10);
-  if(!(mo>=1))mo=3;
-  if(mo>6)mo=6;
-  $("minord").value=mo;
-  let seed=parseInt($("mseed").value,10);
-  if(!Number.isFinite(seed))seed=(Math.random()*1e9)>>>0;
-  const st=genHiStage(seed,mo);
-  if(!st){$("makerinfo").textContent="生成に失敗しました。位数やシードを変えてお試しください。";return;}
-  customStage=st;
-  customSeed=(((seed+1)*0x9E3779B9)^0x4D414B45)>>>0;
-  customPanels=null;
-  if(mode!=="panel"){mode="panel";try{localStorage.setItem("lfnb-mode","panel");}catch(e){}}
-  const ords=st.sol.map(function(c){return traj(c.t,st.maxlv).L;});
-  const lo=Math.min.apply(null,ords),hi=Math.max.apply(null,ords);
-  $("makerinfo").innerHTML="生成しました：最低位数 "+mo+" ／ 想定解 "+st.sol.length+"本（位数 "+lo+(lo!==hi?"〜"+hi:"")+"） ／ 敵 "+st.enemies.length+"体 ／ 見本 "+st.par+" MP。下のパネルから正しい漸化式を選んで詠唱！";
-  selIdx=-1;
-  initStage();
-};
+function showPreview(t){
+  const pv=$("preview");
+  if(!t){pv.textContent="";return;}
+  const st=cur(),info=stepInfo(t,st.boardMax),set=new Set(info.sq);
+  const kills=st.enemies.filter(function(e){return set.has(e)&&!dead.has(e);});
+  const allyHit=st.allies.filter(function(a){return set.has(a);});
+  let heal=0;st.potions.forEach(function(p){if(set.has(p.sq)&&!potUsed.has(p.sq))heal+=p.heal;});
+  const mpAfter=Math.min(st.mp,mpNow-info.cost+heal);
+  let msg='消費MP '+info.cost+"（位数"+info.L+"）／ 撃破 "+kills.length+"体";
+  if(heal>0)msg+='<span class="heal-t"> ／ 回復+'+heal+"</span>";
+  msg+=" ／ 射出後MP "+(mpNow<info.cost?"不足":mpAfter);
+  if(allyHit.length)msg+='<span class="warn-t"> ／ 仲間'+allyHit.join(",")+"に直撃！ゲームオーバー</span>";
+  pv.innerHTML=msg;
+}
 
-function doCast(T){
-  if(dead)return;
-  const s=cur(),M=BigInt(s.maxlv||BOARD),r=traj(T,s.maxlv),left=s.mp-mpUsed;
-  if(r.cost>left){flash("MPが足りない！（必要"+r.cost+" / 残り"+left+"）");return;}
-  mpUsed+=r.cost;
-  const hitset={};
-  r.path.forEach(function(v){if(v>0n&&v<=M)hitset[v.toString()]=true;});
-  let kills=0,friendly=false;
-  s.enemies.forEach(function(lv,i){
-    if(alive[i]&&hitset[String(lv)]){alive[i]=false;kills++;}
-  });
-  s.allies.forEach(function(lv){if(hitset[String(lv)])friendly=true;});
-  if(friendly)mpUsed+=2;
-  addLog(T,r,kills,friendly);
-  const allDead=s.enemies.every(function(_,i){return !alive[i];});
-  if(allDead&&mpUsed<=s.mp){
-    const rank=mpUsed<=s.par?"魔道士級！最適解です":mpUsed<=s.par+1?"見事！":"クリア！";
-    saveReached(si+1);
-    banner("✦ "+rank+" 消費 "+mpUsed+" MP（見本 "+s.par+" MP）","ok",true);
-    refreshBar();
-  }else if(mpUsed>=s.mp&&!allDead){
-    dead=true;
-    banner("MP切れ…敵が残っています。「やり直す」で再挑戦！","bad");
+function initStage(){
+  const st=cur();
+  mpNow=st.mp;dead=new Set();potUsed=new Set();over=false;won=false;selIdx=-1;
+  $("log").innerHTML="";
+  $("banner").style.display="none";
+  $("preview").textContent="";
+  $("anspanel").style.display="none";
+  refreshBar();renderPanels();render();
+}
+
+function flash(msg){$("preview").innerHTML='<span class="warn-t">'+esc(msg)+"</span>";}
+
+function doLaunch(t){
+  if(over)return;
+  const st=cur(),info=stepInfo(t,st.boardMax);
+  if(info.cost>mpNow){flash("MP不足（必要"+info.cost+" / 残り"+mpNow+"）");return;}
+  mpNow-=info.cost;
+  const set=new Set(info.sq);
+  let kills=0,ally=[],heal=0;
+  st.allies.forEach(function(a){if(set.has(a))ally.push(a);});
+  st.enemies.forEach(function(e){if(set.has(e)&&!dead.has(e)){dead.add(e);kills++;}});
+  st.potions.forEach(function(p){if(set.has(p.sq)&&!potUsed.has(p.sq)){potUsed.add(p.sq);heal+=p.heal;}});
+  mpNow=Math.min(st.mp,mpNow+heal);
+  addLog(t,info,kills,ally,heal);
+  if(ally.length){over=true;banner("仲間（"+ally.join(",")+"）を踏んでしまった…ゲームオーバー","bad");render();renderPanels();return;}
+  const allDead=st.enemies.every(function(e){return dead.has(e);});
+  if(allDead){
+    won=true;over=true;saveReached(si+1);
+    const rank=(mpNow>=0?"":"")+"全ての敵を撃破！";
+    banner("✦ "+rank+" クリア！（見本 "+st.par+" MP・"+st.sol.length+"体）","ok",true);
+  }else if(mpNow<minClone(st)){
+    over=true;banner("MP切れ…敵が残っている。「やり直す」で再挑戦！","bad");
   }
-  render();
+  selIdx=-1;render();renderPanels();
 }
 
 $("cast").onclick=function(){
-  if(playing)return;
-  if(mode==="panel"){
-    const ps=curPanels();
-    if(selIdx<0||selIdx>=ps.length){flash("パネルを選んでから「詠唱」を押してください");return;}
-    const t=ps[selIdx].t;
-    selIdx=-1;
-    showPreview(null);
-    renderPanels();
-    doCast(t);
-    return;
-  }
-  const T=parse();
-  if(!T){$("preview").textContent="整数をカンマ区切りで唱えてください";return;}
-  doCast(T);
-  $("chant").value="";$("preview").textContent="";
+  if(playing||over)return;
+  const st=cur();
+  if(selIdx<0||selIdx>=st.clones.length){flash("影分身を選んでから「放つ」を押してください");return;}
+  const t=st.clones[selIdx];
+  showPreview(null);
+  doLaunch(t);
 };
-$("chant").addEventListener("keydown",function(e){if(e.key==="Enter")$("cast").onclick();});
 $("reset").onclick=function(){if(playing)return;initStage();};
 
 $("ansbtn").onclick=function(){
   const p=$("anspanel");
   if(p.style.display==="block"){p.style.display="none";return;}
-  const s=cur(),list=$("anslist");
+  const st=cur(),list=$("anslist");
   list.innerHTML="";
   let total=0;
-  s.sol.forEach(function(c){
-    const r=traj(c.t,s.maxlv);total+=r.cost;
+  st.sol.forEach(function(t,i){
+    const info=stepInfo(t,st.boardMax);total+=info.cost;
     const row=document.createElement("div");
     row.className="ansrow";
-    const chant=c.t.map(function(v){return v.toString();}).join(", ");
-    row.innerHTML='<div><span class="sp">'+esc(chant)+'</span><span class="cost">'+r.cost+" MP</span>"+uqBadge(r)+"</div><div>"+esc(c.why)+"</div>";
+    row.innerHTML='<div><span class="sp">'+(i+1)+'手目</span><span class="cost">'+info.cost+" MP</span>"+fmtRec(t)+"</div><div>"+esc(cardTerms(t))+"</div>";
     list.appendChild(row);
   });
   const tot=document.createElement("div");
   tot.className="anstotal";
-  tot.textContent="合計 "+total+" MP";
+  tot.textContent="位数合計 "+total+" MP（回復薬を拾いながら順に放つ）";
   list.appendChild(tot);
   p.style.display="block";
 };
@@ -1049,42 +644,37 @@ $("ansbtn").onclick=function(){
 $("autoplay").onclick=function(){
   if(playing)return;
   playing=true;
-  const s=cur();
-  alive=s.enemies.map(function(){return true;});
-  mpUsed=0;dead=false;selIdx=-1;
-  $("log").innerHTML="";
-  $("banner").style.display="none";
-  render();
-  renderPanels();
-  s.sol.forEach(function(c,i){
+  const st=cur();
+  mpNow=st.mp;dead=new Set();potUsed=new Set();over=false;won=false;selIdx=-1;
+  $("log").innerHTML="";$("banner").style.display="none";
+  render();renderPanels();
+  st.sol.forEach(function(t,i){
     setTimeout(function(){
-      if(mode==="panel"){
-        // Every sol chant is a panel by construction — highlight it.
-        selIdx=curPanels().findIndex(function(p){
-          return p.t.length===c.t.length&&p.t.every(function(v,k){return v===c.t[k];});
-        });
-        renderPanels();
-        showPreview(c.t);
-      }else{
-        $("chant").value=c.t.map(function(v){return v.toString();}).join(", ");
-        $("chant").dispatchEvent(new Event("input"));
-      }
+      selIdx=st.clones.findIndex(function(c){return c.length===t.length&&c.every(function(v,k){return v===t[k];});});
+      renderPanels();render();showPreview(t);
       setTimeout(function(){
-        doCast(c.t);
-        selIdx=-1;
-        renderPanels();
-        $("chant").value="";$("preview").textContent="";
-        if(i===s.sol.length-1)playing=false;
+        doLaunch(t);showPreview(null);
+        if(i===st.sol.length-1)playing=false;
       },800);
-    },i*1800);
+    },i*1700);
   });
+};
+
+$("mgen").onclick=function(){
+  if(playing)return;
+  let mo=parseInt($("minord").value,10);if(!(mo>=2))mo=2;if(mo>6)mo=6;$("minord").value=mo;
+  let B=parseInt($("blen").value,10);if(!(B>=24))B=48;if(B>1000)B=1000;$("blen").value=B;
+  let seed=parseInt($("mseed").value,10);if(!Number.isFinite(seed))seed=(Math.random()*1e9)>>>0;
+  const st=genSugoroku(seed,mo,B);
+  if(!st){$("makerinfo").textContent="生成に失敗しました。値を変えてお試しください。";return;}
+  customStage=st;
+  $("makerinfo").innerHTML="生成：影分身 "+st.sol.length+"体で解ける／敵 "+st.enemies.length+"体・仲間 "+st.allies.length+"人・回復薬 "+st.potions.length+"個／初期MP "+st.mp+"・盤面 "+st.boardMax+"マス。下の6体から選んで放て！";
+  initStage();
 };
 
 function banner(msg,kind,next){
   const b=$("banner");
-  b.style.display="block";
-  b.textContent=msg;
-  b.className="banner "+kind;
+  b.style.display="block";b.textContent=msg;b.className="banner "+kind;
   if(next){
     const nb=document.createElement("button");
     nb.textContent="次の面へ ▶";
@@ -1092,31 +682,31 @@ function banner(msg,kind,next){
     b.appendChild(nb);
   }
 }
-function flash(msg){$("preview").innerHTML='<span class="warn-t">'+esc(msg)+"</span>";}
 
-function addLog(T,r,kills,friendly){
-  const s=cur(),typedN=T.length,M=BigInt(s.maxlv||BOARD);
+function addLog(t,info,kills,ally,heal){
+  const st=cur();
   const e=document.createElement("div");
   e.className="logent";
   let chips="";
-  r.path.slice(0,24).forEach(function(v,i){
-    const pos=v>0n&&v<=M;
-    const num=pos?Number(v):-1;
-    const isE=pos&&s.enemies.indexOf(num)>=0;
-    const isA=pos&&s.allies.indexOf(num)>=0;
+  info.path.slice(0,26).forEach(function(v){
+    const n=(v>=0n&&v<=BigInt(st.boardMax))?Number(v):-1;
+    const occ=n>=0?occAt(st,n):null;
     let cls="t";
-    if(isA)cls+=" fr";else if(isE)cls+=" hit";
-    if(i>=typedN)cls+=" ext";
-    chips+='<span class="'+cls+'" style="animation-delay:'+(i*45)+'ms">'+v.toString()+"</span>";
+    if(occ&&occ.kind==="ally")cls+=" fr";
+    else if(occ&&occ.kind==="enemy")cls+=" hit";
+    else if(occ&&occ.kind==="potion")cls+=" hl";
+    chips+='<span class="'+cls+'">'+v.toString()+"</span>";
   });
-  const tail=r.end==="dis"?'<span class="tail">霧散</span>':r.end==="out"?'<span class="tail">場外へ</span>':r.path.length>24?'<span class="tail">…</span>':"";
-  e.innerHTML='<div class="lhead"><span class="nm">レベル f(n) バースト</span>'+uqBadge(r)+'<span class="meta">位数'+r.L+" ＝ "+r.cost+" MP — "+kills+"体撃破</span>"+(friendly?'<span class="ff">仲間に直撃！回復に+2MP</span>':"")+"</div><div>"+chips+tail+"</div>";
+  const tail=info.end==="dis"?'<span class="t">霧散</span>':info.end==="out"?'<span class="t">場外</span>':info.path.length>26?'<span class="t">…</span>':"";
+  e.innerHTML='<div class="lhead"><span class="nm">影分身</span><span class="meta">位数'+info.L+" ＝ "+info.cost+" MP — "+kills+"体撃破</span>"+
+    (heal>0?'<span class="hl">回復+'+heal+"MP</span>":"")+
+    (ally.length?'<span class="ff">仲間直撃！ゲームオーバー</span>':"")+"</div><div>"+chips+tail+"</div>";
   $("log").prepend(e);
 }
 
 initStage();
-window.__lnb={genStage:genStage,traj:traj,curPanels:curPanels,buildPanels:buildPanels,
-  fmtRec:fmtRec,genHiStage:genHiStage,mkHi:mkHi,minOrderFor:minOrderFor,panelStageAt:panelStageAt};
+window.__lnb={genSugoroku:genSugoroku,traj:traj,stepInfo:stepInfo,cur:function(){return cur();},
+  campaign:campaign,setCustom:function(s){customStage=s;initStage();},state:function(){return{mpNow:mpNow,over:over,won:won,dead:Array.from(dead)};}};
 })();
 </script>
 </body>
